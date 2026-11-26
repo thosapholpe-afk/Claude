@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gait Simulator</title>
+<meta name="description" content="จำลองการเดินของคนปกติ ผลของ BMI ต่อมุมเข่า และการเดินของผู้ใช้ขาเทียมใต้เข่า พร้อมการตรวจจับ gait events ด้วย IMU + TCN">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --ink:#15181d; --ink2:#4a5260; --ink3:#7b8494;
+  --line:#e1e4ea; --grid:#eceef2; --accent:#0f766e; --accent-ink:#ffffff;
+  --right:#2563eb; --left:#ea580c; --ref:#9aa3b2; --warn:#b45309; --warn-bg:#fff7e6;
+  --ground:#2b3038; --belt:#3a404a; --skin:#c9a38a; --pros:#7c8594; --imu:#f97316;
+  --chip:#eef2f6;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1216; --panel:#171b21; --ink:#e8ebf0; --ink2:#a9b1bd; --ink3:#7a8392;
+    --line:#2a313b; --grid:#222831; --accent:#2dd4bf; --accent-ink:#06201d;
+    --right:#60a5fa; --left:#fb923c; --ref:#6b7482; --warn:#fbbf24; --warn-bg:#2a2112;
+    --ground:#cfd5de; --belt:#59616d; --skin:#d8b49c; --pros:#a3acb9; --imu:#fb923c;
+    --chip:#1f252d;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --panel:#171b21; --ink:#e8ebf0; --ink2:#a9b1bd; --ink3:#7a8392;
+  --line:#2a313b; --grid:#222831; --accent:#2dd4bf; --accent-ink:#06201d;
+  --right:#60a5fa; --left:#fb923c; --ref:#6b7482; --warn:#fbbf24; --warn-bg:#2a2112;
+  --ground:#cfd5de; --belt:#59616d; --skin:#d8b49c; --pros:#a3acb9; --imu:#fb923c;
+  --chip:#1f252d;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans Thai",system-ui,sans-serif;font-size:15px;line-height:1.55}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+header{padding:20px 16px 8px;max-width:1440px;margin:0 auto}
+header h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+header p{margin:4px 0 0;color:var(--ink2);font-size:14px;max-width:880px}
+.wrap{max-width:1440px;margin:0 auto;padding:8px 16px 40px;display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px}
+@media (max-width:980px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+aside .panel+.panel{margin-top:12px}
+h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);margin:0 0 10px}
+h3{font-size:15px;margin:0 0 8px}
+label{display:block;font-size:13px;color:var(--ink2);margin:10px 0 4px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.row output{font-family:"IBM Plex Mono",monospace;font-size:13px;color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+select,input[type=number]{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font:inherit;font-size:14px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--chip);padding:3px;border-radius:8px}
+.seg.two{grid-template-columns:repeat(2,1fr)}
+.seg.four{grid-template-columns:repeat(4,1fr)}
+.seg button{border:0;background:transparent;color:var(--ink2);padding:7px 4px;border-radius:6px;font:inherit;font-size:13px;cursor:pointer}
+.seg button.on{background:var(--panel);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.bmi{display:flex;align-items:baseline;gap:10px;margin-top:10px;padding:10px;border-radius:8px;background:var(--chip)}
+.bmi b{font-size:26px;font-family:"IBM Plex Mono",monospace}
+.note{font-size:12.5px;color:var(--ink3);margin-top:8px}
+.warn{font-size:12.5px;color:var(--warn);background:var(--warn-bg);border-radius:6px;padding:8px 10px;margin-top:8px;display:none}
+.warn.show{display:block}
+details summary{cursor:pointer;font-size:13px;color:var(--ink2);margin-top:8px}
+.coef{display:grid;grid-template-columns:1fr 84px;gap:6px 8px;align-items:center;margin-top:8px;font-size:12.5px;color:var(--ink2)}
+.coef input{padding:4px 6px;font-size:13px}
+.stage{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+@media (max-width:760px){.stage{grid-template-columns:minmax(0,1fr)}}
+.canvas-box{position:relative}
+.canvas-box canvas{display:block;width:100%;border-radius:8px}
+#sag{height:380px}
+#front{height:380px}
+.cap{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap}
+.legend{display:flex;gap:12px;font-size:12.5px;color:var(--ink2);flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.legend i.dash{background:repeating-linear-gradient(90deg,var(--ref) 0 4px,transparent 4px 7px)!important}
+.metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:16px}
+.m{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.m .k{font-size:12px;color:var(--ink3)}
+.m .v{font-family:"IBM Plex Mono",monospace;font-size:18px;font-weight:500;margin-top:2px}
+.m .s{font-size:12px;color:var(--ink2);font-family:"IBM Plex Mono",monospace}
+.m .d{font-size:11.5px;color:var(--ink3)}
+.charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+@media (max-width:1100px){.charts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.charts{grid-template-columns:minmax(0,1fr)}}
+.chart{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+.chart canvas{width:100%;height:170px;display:block}
+.chart .t{font-size:13px;font-weight:600}
+.chart .sub{font-size:11.5px;color:var(--ink3)}
+.wide{margin-top:16px}
+#contact{width:100%;height:190px;display:block}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace}
+th:first-child,td:first-child{text-align:left;font-family:inherit}
+th{font-weight:600;color:var(--ink3);font-family:inherit;font-size:12px}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:var(--chip);color:var(--ink2);margin-left:6px;font-weight:500}
+.refs{margin-top:16px;font-size:13px;color:var(--ink2)}
+.refs ol{padding-left:20px;margin:6px 0}
+.refs li{margin:4px 0}
+.disabled{opacity:.45;pointer-events:none}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.ok{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Gait Simulator — จำลองการเดินของคน</h1>
+  <p>เทียบการเดินปกติ ผลของ BMI ต่อมุมเข่า (งานวิจัยรามาฯ, Ahsan 2022) และการเดินของผู้ใช้ขาเทียมใต้เข่า พร้อมจำลองการตรวจจับจังหวะเท้าแตะพื้น/ยกพ้นพื้นด้วย IMU + TCN (Apidech et al., 2026)</p>
+</header>
+
+<div class="wrap">
+<aside>
+  <div class="panel">
+    <h2>รูปแบบการเดิน</h2>
+    <div class="seg" id="modeSeg">
+      <button data-v="normal" class="on">ปกติ</button>
+      <button data-v="ampL">ขาเทียมซ้าย</button>
+      <button data-v="ampR">ขาเทียมขวา</button>
+    </div>
+    <label>ความเร็ว (ตามโปรโตคอลงานวิจัย)</label>
+    <div class="seg four" id="speedSeg">
+      <button data-v="slow">ช้า</button>
+      <button data-v="comf" class="on">สบาย</button>
+      <button data-v="self">เลือกเอง</button>
+      <button data-v="fast">เร็ว</button>
+    </div>
+    <div class="note" id="speedNote"></div>
+    <div class="row"><label>ความเร็วการเล่นภาพ</label><output id="animOut">1.0×</output></div>
+    <input type="range" id="anim" min="0.1" max="1.5" step="0.05" value="1">
+    <div class="btns"><button class="btn primary" id="playBtn">หยุดชั่วคราว</button><button class="btn" id="resetLog">ล้างสถิติ event</button></div>
+  </div>
+
+  <div class="panel">
+    <h2>ผู้เดิน</h2>
+    <div class="row"><label>อายุ</label><output id="ageOut"></output></div>
+    <input type="range" id="age" min="18" max="85" step="1" value="35">
+    <label>เพศ</label>
+    <div class="seg two" id="sexSeg"><button data-v="M" class="on">ชาย</button><button data-v="F">หญิง</button></div>
+    <div class="row"><label>ส่วนสูง</label><output id="htOut"></output></div>
+    <input type="range" id="ht" min="140" max="200" step="0.5" value="170">
+    <div class="row"><label>น้ำหนัก</label><output id="wtOut"></output></div>
+    <input type="range" id="wt" min="35" max="150" step="0.5" value="64">
+    <div class="bmi"><span>BMI</span><b id="bmiVal">–</b><span id="bmiCat" class="tag"></span></div>
+    <div class="btns">
+      <button class="btn" data-bmi="21">BMI 21</button>
+      <button class="btn" data-bmi="27">น้ำหนักเกิน 27</button>
+      <button class="btn" data-bmi="33">อ้วน 33</button>
+      <button class="btn" id="presetAmp">ค่าเฉลี่ยผู้เข้าร่วม (ขาเทียม)</button>
+    </div>
+    <div class="warn" id="bmiWarn"></div>
+    <details>
+      <summary>สัมประสิทธิ์โมเดล (แก้ไขได้)</summary>
+      <div class="coef">
+        <span>Varus ตอนส้นแตะพื้น ต่อ BMI +1 (°)</span><input type="number" id="cVar" step="0.01" value="-0.33">
+        <span>Internal rotation ต่อ BMI +1 (°)</span><input type="number" id="cIR" step="0.05" value="1.0">
+        <span>BMI อ้างอิง (kg/m²)</span><input type="number" id="cRef" step="0.1" value="22">
+        <span>Varus ต่ออายุ +1 ปี (°)</span><input type="number" id="cVarAge" step="0.01" value="0">
+        <span>Varus ส่วนต่างเพศหญิง (°)</span><input type="number" id="cVarSex" step="0.1" value="0">
+        <span>IR ต่ออายุ +1 ปี (°)</span><input type="number" id="cIRAge" step="0.01" value="0">
+        <span>IR ส่วนต่างเพศหญิง (°)</span><input type="number" id="cIRSex" step="0.1" value="0">
+      </div>
+      <div class="note">ค่าเริ่มต้นของ BMI มาจากผลงานวิจัยรามาฯ (−0.33°, +0.9–1.1°) ส่วนอายุและเพศพบว่าสัมพันธ์กันแต่ไม่ได้ระบุค่าสัมประสิทธิ์ไว้ จึงตั้งเป็น 0 ให้กรอกจากตารางในงานวิจัยเอง</div>
+    </details>
+  </div>
+
+  <div class="panel" id="imuPanel">
+    <h2>ตรวจจับ gait events (IMU + TCN)</h2>
+    <label>ชุด IMU ฝั่งขาเทียม (AMP)</label>
+    <select id="imuAmp"></select>
+    <label>ชุด IMU ฝั่งขาดี (SOU)</label>
+    <select id="imuSou"></select>
+    <div class="note">ค่า error ของแต่ละ event สุ่มจาก median และ IQR ใน Table 6 แล้วปัดให้ลงช่วง 5 ms (สุ่มที่ 200 Hz) ค่า F1 มาจาก Table 5 ถ้าชุดนั้นมีรายงานไว้</div>
+    <div class="note" id="imuOff" style="display:none;color:var(--warn)">ใช้ได้เฉพาะโหมดขาเทียม เพราะงานวิจัยนี้ศึกษาในผู้พิการขาขาดใต้เข่า</div>
+  </div>
+</aside>
+
+<main>
+  <div class="panel">
+    <div class="stage">
+      <div>
+        <div class="cap"><h3>มุมมองด้านข้าง (sagittal) บนลู่วิ่ง</h3>
+          <div class="legend"><span><i style="background:var(--left)"></i>ขาซ้าย <span id="lgL"></span></span><span><i style="background:var(--right)"></i>ขาขวา <span id="lgR"></span></span><span><i style="background:var(--imu)"></i>IMU</span></div></div>
+        <div class="canvas-box"><canvas id="sag"></canvas></div>
+      </div>
+      <div>
+        <div class="cap"><h3>มุมมองด้านหน้า (frontal)</h3>
+          <div class="row" style="gap:6px;font-size:12.5px;color:var(--ink2)">ขยายมุม <input type="range" id="exag" min="1" max="6" step="0.5" value="3" style="width:90px"><output id="exagOut" class="mono">3×</output></div></div>
+        <div class="canvas-box"><canvas id="front"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="metrics" id="metrics"></div>
+
+  <div class="charts">
+    <div class="chart"><div class="t">มุมงอสะโพก (Hip flexion)</div><div class="sub">องศา · % ของรอบการเดิน</div><canvas id="cHip"></canvas></div>
+    <div class="chart"><div class="t">มุมงอเข่า (Knee flexion)</div><div class="sub">องศา · % ของรอบการเดิน</div><canvas id="cKnee"></canvas></div>
+    <div class="chart"><div class="t">มุมข้อเท้า (Dorsi + / Plantar −)</div><div class="sub">องศา · % ของรอบการเดิน</div><canvas id="cAnk"></canvas></div>
+    <div class="chart"><div class="t">มุมเข่าโก่ง (Knee varus +)</div><div class="sub">องศา · ระนาบ frontal</div><canvas id="chVar"></canvas></div>
+    <div class="chart"><div class="t">เข่าบิดเข้าใน (Internal rotation +)</div><div class="sub">องศา · ระนาบ transverse</div><canvas id="chIR"></canvas></div>
+    <div class="chart"><div class="t">แรงปฏิกิริยาพื้นแนวดิ่ง (vGRF)</div><div class="sub">นิวตัน · ช่วงเท้าอยู่บนพื้น</div><canvas id="cGRF"></canvas></div>
+  </div>
+  <div class="legend" style="margin-top:8px"><span><i style="background:var(--left)"></i>ซ้าย</span><span><i style="background:var(--right)"></i>ขวา</span><span><i class="dash"></i>ค่าอ้างอิง: เดินปกติ, BMI อ้างอิง, ความเร็วสบาย</span></div>
+
+  <div class="panel wide">
+    <div class="cap"><h3>สัญญาณเท้าแตะพื้น: จริง (vGRF &gt; 20 N) เทียบกับค่าที่ TCN ทำนาย</h3>
+      <div class="legend"><span><i style="background:var(--ref);height:8px"></i>ค่าจริงจากแผ่นวัดแรง</span><span><i style="background:var(--accent)"></i>TCN ทำนาย</span><span>▲ IC &nbsp; ▼ FC</span></div></div>
+    <canvas id="contact"></canvas>
+  </div>
+
+  <div class="grid2 wide">
+    <div class="panel">
+      <h3>ความคลาดเคลื่อนของ event (จำลอง เทียบกับงานวิจัย)</h3>
+      <table id="evTable"></table>
+      <div class="note">IC = initial contact (เท้าแตะพื้น), FC = final contact (เท้ายกพ้นพื้น) · error = t<sub>pred</sub> − t<sub>ref</sub> · จับคู่ภายในหน้าต่าง ±50 ms</div>
+    </div>
+    <div class="panel">
+      <h3>สิ่งที่โมเดลนี้จำลอง</h3>
+      <div style="font-size:13.5px;color:var(--ink2)">
+        <p style="margin:0 0 6px"><b style="color:var(--ink)">BMI กับมุมเข่า (รามาฯ):</b> BMI ที่เพิ่มขึ้นทุก 1 kg/m² ทำให้ varus ตอนส้นเท้าแตะพื้นลดลง 0.33° และ internal rotation เพิ่มขึ้น 0.9–1.1° พบในกลุ่มที่ BMI อยู่ในช่วงปกติทั้งหมด</p>
+        <p style="margin:0 0 6px"><b style="color:var(--ink)">ระดับ BMI (Ahsan 2022):</b> มุมข้อต่อและแรงที่ข้อต่อเปลี่ยนตามระดับ BMI ในโมเดลนี้ เมื่อ BMI สูงขึ้น ความเร็วจะลดลง ช่วงเท้าอยู่บนพื้น (stance) ยาวขึ้น เข่างอตอนรับน้ำหนักน้อยลง ฐานก้าวกว้างขึ้น และแรง/โมเมนต์ที่เข่าสูงขึ้น ทิศทางของแนวโน้มอิงงานวิจัย แต่ขนาดเป็นค่าประมาณเพื่อการสาธิต</p>
+        <p style="margin:0"><b style="color:var(--ink)">ขาเทียมใต้เข่า (Apidech 2026):</b> ใช้ความเร็วจาก Table 2 ฝั่งขาดี stance ยาวกว่าและรับแรงมากกว่า ส่วนฝั่งขาเทียมข้อเท้าไม่มีแรงถีบส่ง (passive) และเข่างอตอนรับน้ำหนักน้อย ความคลาดเคลื่อนของ event มาจาก Table 6</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel refs">
+    <h3>แหล่งอ้างอิง</h3>
+    <ol>
+      <li>Apidech H, Kusakunniran W, Samala M, Jamkrajang P, Manupibul U, Niamsang W, Limroongreungrat W. <i>Real-Time Gait Events Detection Using IMU Combined With TCNs Model in Transtibial Amputees.</i> IEEE Access 14 (2026) 113223–113234. doi:10.1109/ACCESS.2026.3715835</li>
+      <li>งานวิจัยค่าปกติการเดินของคนไทย คณะแพทยศาสตร์โรงพยาบาลรามาธิบดี: อายุ เพศ และ BMI สัมพันธ์กับมุมเข่า (−0.33° varus ตอน IC, +0.9–1.1° IR ต่อ BMI 1 kg/m²)</li>
+      <li>Ahsan M. (2022) เปรียบเทียบ kinematics และ kinetics ของข้อต่อในกลุ่มน้ำหนักปกติ น้ำหนักเกิน และอ้วน</li>
+    </ol>
+    <div class="note">⚠️ เป็นเครื่องมือเพื่อการเรียนการสอนและการสาธิตเท่านั้น ไม่ใช่เครื่องมือวินิจฉัย กราฟมุมข้อต่อพื้นฐานเป็นรูปทรงมาตรฐานของการเดินปกติที่ปรับตามพารามิเตอร์ ไม่ได้มาจากข้อมูลดิบของงานวิจัย</div>
+  </div>
+</main>
+</div>
+
+<script>
+(() => {
+"use strict";
+// ---------------- Data from Apidech et al. 2026 ----------------
+const AMP_SPEED = {comf:0.68, fast:0.82, slow:0.54, self:0.72}; // Table 2 means (m/s)
+// Table 6: [config, IC median, IC IQR, IC MAE, FC median, FC IQR, FC MAE]; F1 from Table 5 when reported
+const T6 = {
+  AMP: [
+    ["L5", 0.006,0.028,0.019, -0.008,0.018,0.017, null, "1 IMU"],
+    ["L4", 0.013,0.013,0.020, 0.027,0.018,0.034, 0.93, "1 IMU"],
+    ["L5+L6", -0.010,0.015,0.015, 0.008,0.015,0.015, null, "2 IMU"],
+    ["L3+L5", 0.007,0.015,0.016, 0.017,0.013,0.020, null, "2 IMU"],
+    ["L3+L5+L6", -0.003,0.014,0.013, 0.025,0.015,0.027, null, "3 IMU"],
+    ["L1+L3+L5", 0.002,0.010,0.013, 0.022,0.017,0.025, null, "3 IMU"],
+    ["L3+L4+L5+L6", 0.004,0.001,0.012, 0.017,0.013,0.023, 0.97, "4 IMU"],
+    ["L1+L3+L5+L6", 0.002,0.015,0.014, 0.014,0.019,0.018, null, "4 IMU"],
+    ["ALL16", 0.004,0.009,0.013, 0.019,0.010,0.023, 0.92, "16 IMU"],
+  ],
+  SOU: [
+    ["L6", -0.006,0.017,0.016, 0.022,0.015,0.030, 0.94, "1 IMU"],
+    ["L3", 0.012,0.010,0.018, 0.015,0.015,0.024, 0.96, "1 IMU"],
+    ["L3+L6", 0.003,0.013,0.013, 0.015,0.013,0.021, 0.95, "2 IMU"],
+    ["L4+L5", 0.005,0.014,0.013, 0.013,0.015,0.021, 0.95, "2 IMU"],
+    ["L4+L5+L6", 0.004,0.011,0.012, 0.023,0.015,0.028, 0.96, "3 IMU"],
+    ["L1+L5+L6", 0.000,0.011,0.012, 0.008,0.015,0.020, null, "3 IMU"],
+    ["L1+L3+L4+L5", 0.004,0.013,0.013, 0.017,0.013,0.024, null, "4 IMU"],
+    ["L3+L4+L5+L6", 0.008,0.008,0.013, 0.015,0.011,0.011, 0.96, "4 IMU"],
+    ["ALL16", 0.005,0.009,0.014, 0.028,0.013,0.031, 0.94, "16 IMU"],
+  ]
+};
+// IMU codes: L1 R thigh, L2 L thigh, L3 R shank, L4 L shank, L5 R foot, L6 L foot
+const IMU_SEG = {L1:["R","thigh"],L2:["L","thigh"],L3:["R","shank"],L4:["L","shank"],L5:["R","foot"],L6:["L","foot"]};
+
+// ---------------- Base normal gait keyframes (% gait cycle, toe-off at 60%) ----------------
+const HIP  = [[0,30],[10,27],[30,9],[50,-9],[60,-4],[75,20],[87,32],[100,30]];
+const KNEE = [[0,3],[15,18],[40,4],[60,38],[73,62],[87,30],[97,2],[100,3]];
+const ANK  = [[0,0],[8,-6],[30,5],[48,10],[62,-15],[75,-2],[90,1],[100,0]];
+const VAR  = [[0,2.0],[15,3.5],[40,3.0],[60,1.5],[75,-0.5],[90,0.8],[100,2.0]]; // illustrative shape
+const IRK  = [[0,3],[15,8],[40,6],[60,2],[75,-2],[90,0.5],[100,3]];             // illustrative shape
+
+function interp(keys,p){
+  const n=keys.length;
+  let i=0; while(i<n-2 && p>=keys[i+1][0]) i++;
+  const P=(k)=>{ if(k<0) return [keys[n-2+k+1][0]-100, keys[n-2+k+1][1]]; if(k>n-1) return [keys[k-n+1][0]+100, keys[k-n+1][1]]; return keys[k]; };
+  const p0=P(i-1),p1=P(i),p2=P(i+1),p3=P(i+2);
+  const h=p2[0]-p1[0], t=(p-p1[0])/h;
+  const m1=(p2[1]-p0[1])/(p2[0]-p0[0])*h, m2=(p3[1]-p1[1])/(p3[0]-p1[0])*h;
+  const t2=t*t,t3=t2*t;
+  return (2*t3-3*t2+1)*p1[1]+(t3-2*t2+t)*m1+(-2*t3+3*t2)*p2[1]+(t3-t2)*m2;
+}
+const g=(x,c,w)=>Math.exp(-0.5*((x-c)/w)**2);
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const frac=(x)=>x-Math.floor(x);
+const rad=Math.PI/180;
+
+// ---------------- State ----------------
+const S = { mode:"normal", speed:"comf", sex:"M", age:35, ht:170, wt:64, anim:1, exag:3, playing:true,
+  imuAmp:0, imuSou:3 };
+const $=(id)=>document.getElementById(id);
+
+function coef(){ return {
+  var:+$("cVar").value||0, ir:+$("cIR").value||0, ref:+$("cRef").value||22,
+  varAge:+$("cVarAge").value||0, varSex:+$("cVarSex").value||0, irAge:+$("cIRAge").value||0, irSex:+$("cIRSex").value||0 }; }
+
+// Compute model parameters for a given subject/mode
+function model(o){
+  const C=coef();
+  const h=o.ht/100, bmi=o.wt/(h*h), dB=bmi-C.ref, dBp=Math.max(0,dB);
+  const amp = o.mode!=="normal";
+  const ampSide = o.mode==="ampL"?"L":o.mode==="ampR"?"R":null;
+  let v;
+  if(amp) v=AMP_SPEED[o.speed];
+  else {
+    const base=1.25*{comf:1,fast:1.2,slow:0.8,self:1.05}[o.speed];
+    v = base*clamp(1-0.008*dBp,0.75,1)*clamp(1-0.004*Math.max(0,o.age-40),0.8,1);
+  }
+  const strideLen = h*(0.45+0.3*v);
+  const T = strideLen/v;
+  const sfBase = clamp(0.62-0.05*(v-1.0),0.57,0.68) + (amp?0:clamp(0.0025*dBp,0,0.05));
+  const BW = o.wt*9.81;
+  const varOff = C.var*dB + C.varAge*(o.age-35) + (o.sex==="F"?C.varSex:0);
+  const irOff  = C.ir*dB  + C.irAge*(o.age-35)  + (o.sex==="F"?C.irSex:0);
+  const vs=v/1.25;
+  const leg = (side)=>{
+    const isAmp = side===ampSide, isSou = amp && !isAmp;
+    const p = {
+      side, isAmp, isSou,
+      sf: sfBase + (isAmp?-0.025:isSou?0.025:0),
+      kLR: isAmp?5:(12+6*vs) - (amp?0:clamp(0.35*dBp,0,6)) - (isSou?1:0),
+      kSw: (58+4*vs) - (isAmp?6:0),
+      ankPO: isAmp?-3:(-10-5*vs),
+      dorsi: isAmp?0.55:1,
+      varOff, irOff,
+    };
+    let p1=1.0+0.18*(v-0.6), p2=1.0+0.15*(v-0.6);
+    if(isSou){p1+=0.08;p2+=0.03;}
+    if(isAmp){p1-=0.03;p2=0.93+0.05*(v-0.6);}
+    p.p1=p1;p.p2=p2;p.valley=clamp(0.86-0.14*(v-0.6),0.6,0.88);
+    return p;
+  };
+  return { bmi, dB, v, T, strideLen, cadence:120/T, BW, amp, ampSide,
+    stepW: 0.09+0.004*dBp+(amp?0.04:0), lean: 3+0.25*dBp,
+    kamPct: 2.6+0.05*dBp, legs:{R:leg("R"),L:leg("L")} };
+}
+
+function remap(p,sf){ return p<sf ? p/sf*60 : 60+(p-sf)/(1-sf)*40; }
+function angles(L,p){ // p in [0,1)
+  const q=remap(p,L.sf);
+  const hip=interp(HIP,q);
+  const knee=interp(KNEE,q)+(L.kLR-18)*g(q,15,7)+(L.kSw-62)*g(q,73,9);
+  let ank=interp(ANK,q)+(L.ankPO+15)*g(q,62,6);
+  if(ank>0) ank*=L.dorsi;
+  const varus=interp(VAR,q)+L.varOff;
+  const ir=interp(IRK,q)+L.irOff;
+  return {hip,knee:Math.max(0,knee),ank,varus,ir};
+}
+function grf(L,p,BW){
+  if(p>=L.sf) return 0;
+  const s=p/L.sf, base=(x)=>L.valley*Math.pow(Math.sin(Math.PI*x),0.5);
+  return BW*Math.max(0, base(s)+(L.p1-base(0.23))*g(s,0.23,0.09)+(L.p2-base(0.77))*g(s,0.77,0.09));
+}
+
+// ---------------- Curves cache ----------------
+let M, REF, CUR={}, REFC={};
+function curves(m){
+  const out={};
+  for(const sd of ["R","L"]){
+    const L=m.legs[sd], a={hip:[],knee:[],ank:[],varus:[],ir:[],grf:[]};
+    for(let i=0;i<=100;i++){ const p=Math.min(i/100,0.9999), A=angles(L,p);
+      a.hip.push(A.hip);a.knee.push(A.knee);a.ank.push(A.ank);a.varus.push(A.varus);a.ir.push(A.ir);a.grf.push(grf(L,p,m.BW)); }
+    out[sd]=a;
+  }
+  return out;
+}
+function recompute(){
+  M=model(S);
+  const C=coef();
+  const refWt=C.ref*(S.ht/100)**2;
+  REF=model({...S,mode:"normal",speed:"comf",wt:refWt});
+  CUR=curves(M); REFC=curves(REF);
+  updateUI();
+}
+
+// ---------------- UI ----------------
+function bmiCat(b){ return b<18.5?"น้ำหนักน้อย":b<25?"ปกติ":b<30?"น้ำหนักเกิน":"อ้วน"; }
+function sideLabel(sd){ if(!M.amp) return ""; return sd===M.ampSide?"(AMP ขาเทียม)":"(SOU ขาดี)"; }
+function updateUI(){
+  $("ageOut").textContent=S.age+" ปี";
+  $("htOut").textContent=S.ht.toFixed(1)+" cm";
+  $("wtOut").textContent=S.wt.toFixed(1)+" kg";
+  $("bmiVal").textContent=M.bmi.toFixed(1);
+  $("bmiCat").textContent=bmiCat(M.bmi)+" (WHO)";
+  const w=$("bmiWarn");
+  if(M.bmi<18.5||M.bmi>=25){ w.classList.add("show");
+    w.textContent="BMI นี้อยู่นอกช่วงปกติ ซึ่งเป็นช่วงที่งานวิจัยรามาฯ ศึกษาไว้ ค่า varus และ IR จึงได้จากการยืดเส้นตรงออกไป (extrapolation) ส่วนแนวโน้มด้านแรงและท่าเดินอิง Ahsan (2022)"; }
+  else w.classList.remove("show");
+  $("speedNote").textContent = M.amp ? `ใช้ค่าเฉลี่ยจาก Table 2: ${M.v.toFixed(2)} m/s` : `≈ ${M.v.toFixed(2)} m/s (ปรับตาม BMI และอายุ · เร็ว/ช้า = ±20%)`;
+  $("lgL").textContent=sideLabel("L"); $("lgR").textContent=sideLabel("R");
+  $("imuPanel").querySelectorAll("select").forEach(s=>s.disabled=!M.amp);
+  $("imuOff").style.display=M.amp?"none":"block";
+  renderMetrics();
+  renderEvTable();
+}
+function renderMetrics(){
+  const L=M.legs.L,R=M.legs.R, T=M.T;
+  const st=(x)=>(x.sf*T).toFixed(2), sw=(x)=>((1-x.sf)*T).toFixed(2);
+  const vIC=(x)=>angles(x,0).varus, peakIR=(sd)=>Math.max(...CUR[sd].ir);
+  const peakF=(sd)=>Math.max(...CUR[sd].grf);
+  const rvIC=angles(REF.legs.R,0).varus;
+  const si=Math.abs(L.sf-R.sf)/(0.5*(L.sf+R.sf))*100;
+  const kamNm=M.kamPct/100*M.BW*(S.ht/100);
+  const refKam=REF.kamPct/100*REF.BW*(S.ht/100);
+  const lab=(sd)=>M.amp?(sd===M.ampSide?"AMP":"SOU"):sd;
+  const items=[
+    ["ความเร็ว",M.v.toFixed(2)+" m/s",`ความยาวรอบก้าว ${M.strideLen.toFixed(2)} m`],
+    ["Cadence",M.cadence.toFixed(0)+" ก้าว/นาที",`เวลาต่อรอบ ${T.toFixed(2)} s`],
+    [`Stance / Swing ${lab("L")}`,`${st(L)} / ${sw(L)} s`,`stance ${(L.sf*100).toFixed(1)}%`],
+    [`Stance / Swing ${lab("R")}`,`${st(R)} / ${sw(R)} s`,`stance ${(R.sf*100).toFixed(1)}%`],
+    ["ความไม่สมมาตรของ stance",si.toFixed(1)+" %","Symmetry index"],
+    ["Varus ตอนส้นแตะพื้น",vIC(R).toFixed(2)+"°",`ค่าอ้างอิง ${rvIC.toFixed(2)}° (Δ ${(vIC(R)-rvIC>=0?"+":"")}${(vIC(R)-rvIC).toFixed(2)}°)`],
+    ["Internal rotation สูงสุด",peakIR("R").toFixed(1)+"°",`ค่าอ้างอิง ${Math.max(...REFC.R.ir).toFixed(1)}°`],
+    [`vGRF สูงสุด ${lab("L")}`,peakF("L").toFixed(0)+" N",`${(peakF("L")/M.BW).toFixed(2)} × น้ำหนักตัว`],
+    [`vGRF สูงสุด ${lab("R")}`,peakF("R").toFixed(0)+" N",`${(peakF("R")/M.BW).toFixed(2)} × น้ำหนักตัว`],
+    ["โมเมนต์หุบเข่า (KAM)",kamNm.toFixed(0)+" N·m",`ค่าอ้างอิง ${refKam.toFixed(0)} N·m · ค่าประมาณ`],
+    ["ความกว้างฐานก้าว",(M.stepW*100).toFixed(1)+" cm","ค่าประมาณ"],
+  ];
+  $("metrics").innerHTML=items.map(([k,v,s])=>`<div class="m"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${s}</div></div>`).join("");
+}
+
+function fillSelect(sel,rows,idx){
+  sel.innerHTML=rows.map((r,i)=>`<option value="${i}">${r[8]} · ${r[0]} — MAE IC ${(r[3]*1000).toFixed(0)} / FC ${(r[6]*1000).toFixed(0)} ms${r[7]?` · F1 ${r[7].toFixed(2)}`:""}</option>`).join("");
+  sel.value=idx;
+}
+
+function seg(id,key,after){
+  $(id).addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return;
+    $(id).querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));
+    S[key]=b.dataset.v; after&&after(); recompute(); });
+}
+seg("modeSeg","mode",()=>resetEvents());
+seg("speedSeg","speed");
+seg("sexSeg","sex");
+for(const [id,key] of [["age","age"],["ht","ht"],["wt","wt"]]){
+  $(id).addEventListener("input",()=>{S[key]=+$(id).value;recompute();});
+}
+$("anim").addEventListener("input",()=>{S.anim=+$("anim").value;$("animOut").textContent=S.anim.toFixed(2)+"×";});
+$("exag").addEventListener("input",()=>{S.exag=+$("exag").value;$("exagOut").textContent=S.exag+"×";});
+["cVar","cIR","cRef","cVarAge","cVarSex","cIRAge","cIRSex"].forEach(id=>$(id).addEventListener("input",recompute));
+document.querySelectorAll("[data-bmi]").forEach(b=>b.addEventListener("click",()=>{
+  const h=S.ht/100; S.wt=Math.round(+b.dataset.bmi*h*h*2)/2; $("wt").value=S.wt; recompute(); }));
+$("presetAmp").addEventListener("click",()=>{
+  S.age=51;S.ht=166.5;S.wt=63;S.sex="M";
+  $("age").value=51;$("ht").value=166.5;$("wt").value=63;
+  $("sexSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v==="M"));
+  if(S.mode==="normal"){ S.mode="ampL"; $("modeSeg").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x.dataset.v==="ampL")); resetEvents(); }
+  recompute(); });
+$("playBtn").addEventListener("click",()=>{S.playing=!S.playing;$("playBtn").textContent=S.playing?"หยุดชั่วคราว":"เล่นต่อ";});
+$("resetLog").addEventListener("click",()=>resetEvents());
+fillSelect($("imuAmp"),T6.AMP,S.imuAmp); fillSelect($("imuSou"),T6.SOU,S.imuSou);
+$("imuAmp").addEventListener("change",()=>{S.imuAmp=+$("imuAmp").value;resetEvents();});
+$("imuSou").addEventListener("change",()=>{S.imuSou=+$("imuSou").value;resetEvents();});
+
+// ---------------- Event simulation ----------------
+let phi=0, simT=0, history=[], evMarks=[];
+const stride={R:{},L:{}};
+let stats;
+function resetEvents(){
+  stats={R:{ic:[],fc:[]},L:{ic:[],fc:[]}};
+  stride.R={};stride.L={};history=[];evMarks=[];
+  if(M) renderEvTable();
+}
+function randn(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function rowFor(sd){ return sd===M.ampSide? T6.AMP[S.imuAmp] : T6.SOU[S.imuSou]; }
+function errs(sd,k){
+  const st=stride[sd];
+  if(!st[k]){ const r=rowFor(sd);
+    const q=(x)=>Math.round(x/0.005)*0.005;
+    st[k]={ic:q(r[1]+randn()*r[2]/1.349), fc:q(r[4]+randn()*r[5]/1.349)};
+    const keys=Object.keys(st); if(keys.length>12) delete st[keys[0]];
+  }
+  return st[k];
+}
+function legPhase(sd){ const x=phi+(sd==="L"?0.5:0); return {k:Math.floor(x), p:frac(x)}; }
+function predContact(sd){
+  const {k,p}=legPhase(sd), L=M.legs[sd], T=M.T, tau=p*T;
+  const e=errs(sd,k), en=errs(sd,k+1);
+  if(tau>=e.ic && tau< L.sf*T+e.fc) return 1;
+  if(tau>=T+en.ic) return 1;
+  return 0;
+}
+function step(dt){
+  const prev={R:legPhase("R"),L:legPhase("L")};
+  phi+=dt/M.T; simT+=dt;
+  for(const sd of ["R","L"]){
+    const cur=legPhase(sd), L=M.legs[sd];
+    if(M.amp){
+      if(cur.k!==prev[sd].k){ const e=errs(sd,cur.k); stats[sd].ic.push(e.ic); evMarks.push({t:simT,sd,type:"IC",e:e.ic}); }
+      if(prev[sd].p<L.sf && cur.p>=L.sf && cur.k===prev[sd].k){ const e=errs(sd,cur.k); stats[sd].fc.push(e.fc); evMarks.push({t:simT,sd,type:"FC",e:e.fc}); }
+      for(const a of ["ic","fc"]) if(stats[sd][a].length>400) stats[sd][a].shift();
+    }
+  }
+  const s={t:simT};
+  for(const sd of ["R","L"]){ const {p}=legPhase(sd); s["ref"+sd]=p<M.legs[sd].sf?1:0; s["pre"+sd]=M.amp?predContact(sd):null; }
+  history.push(s);
+  while(history.length && history[0].t<simT-4.2) history.shift();
+  while(evMarks.length && evMarks[0].t<simT-4.2) evMarks.shift();
+}
+let evTick=0;
+function renderEvTable(){
+  if(!M.amp){ $("evTable").innerHTML=`<tr><td style="color:var(--ink3)">เลือกโหมดขาเทียมเพื่อดูการจำลองการตรวจจับ event ตามงานวิจัย</td></tr>`; return; }
+  const mae=(a)=>a.length?a.reduce((s,x)=>s+Math.abs(x),0)/a.length:NaN;
+  const med=(a)=>{ if(!a.length) return NaN; const b=[...a].sort((x,y)=>x-y); const m=b.length>>1; return b.length%2?b[m]:(b[m-1]+b[m])/2; };
+  const f=(x)=>isNaN(x)?"–":(x*1000).toFixed(1);
+  const rows=["L","R"].map(sd=>{ const r=rowFor(sd), st=stats[sd], lab=sd===M.ampSide?"AMP":"SOU";
+    return `<tr><td>${lab} · ${r[0]} <span class="tag">n=${st.ic.length}</span></td><td>${f(med(st.ic))}</td><td>${f(mae(st.ic))} <span style="color:var(--ink3)">/ ${(r[3]*1000).toFixed(0)}</span></td><td>${f(med(st.fc))}</td><td>${f(mae(st.fc))} <span style="color:var(--ink3)">/ ${(r[6]*1000).toFixed(0)}</span></td></tr>`; });
+  $("evTable").innerHTML=`<tr><th>ขา · ชุด IMU</th><th>IC median</th><th>IC MAE / paper</th><th>FC median</th><th>FC MAE / paper</th></tr>`+rows.join("")+
+   `<tr><td colspan="5" style="text-align:left;color:var(--ink3);font-family:inherit;font-size:12px;border:0">หน่วย: มิลลิวินาที (ms)</td></tr>`;
+}
+
+// ---------------- Canvas helpers ----------------
+let CSSV={};
+function readVars(){ const cs=getComputedStyle(document.documentElement);
+  for(const k of ["bg","panel","ink","ink2","ink3","line","grid","accent","right","left","ref","ground","belt","skin","pros","imu","chip"]) CSSV[k]=cs.getPropertyValue("--"+k).trim(); }
+readVars();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",readVars);
+function fit(c){ const r=c.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  const w=Math.max(1,Math.round(r.width*d)), h=Math.max(1,Math.round(r.height*d));
+  if(c.width!==w||c.height!==h){c.width=w;c.height=h;}
+  const ctx=c.getContext("2d"); ctx.setTransform(d,0,0,d,0,0); return {ctx,w:r.width,h:r.height}; }
+
+// ---------------- Sagittal figure ----------------
+function legPoints(hipX,hipY,A,H,sc,dir){
+  const Lt=0.245*H*sc, Ls=0.246*H*sc, fl=0.152*H*sc, ah=0.039*H*sc;
+  const th=A.hip*rad, a=(A.hip-A.knee)*rad, b=a+A.ank*rad;
+  const knee=[hipX+dir*Lt*Math.sin(th), hipY+Lt*Math.cos(th)];
+  const ankle=[knee[0]+dir*Ls*Math.sin(a), knee[1]+Ls*Math.cos(a)];
+  const fx=Math.cos(b), fy=-Math.sin(b), nx=Math.sin(b), ny=Math.cos(b);
+  const heel=[ankle[0]+dir*(-0.22*fl*fx+ah*nx), ankle[1]+(-0.22*fl*fy+ah*ny)];
+  const toe=[heel[0]+dir*fl*fx, heel[1]+fl*fy];
+  return {hip:[hipX,hipY],knee,ankle,heel,toe};
+}
+function drawSag(){
+  const c=$("sag"), {ctx,w,h}=fit(c);
+  ctx.clearRect(0,0,w,h);
+  const H=S.ht/100, groundY=h-46, sc=(h-80)/ (H*1.08);
+  const cx=w*0.5, dir=1;
+  // pelvis height so lowest foot point is on ground
+  const A={R:angles(M.legs.R,legPhase("R").p), L:angles(M.legs.L,legPhase("L").p)};
+  let low=0;
+  for(const sd of ["R","L"]){ const P=legPoints(0,0,A[sd],H,sc,dir); low=Math.max(low,P.heel[1],P.toe[1]); }
+  const hipY=groundY-low, hipX=cx;
+  // treadmill belt
+  ctx.fillStyle=CSSV.belt; ctx.fillRect(cx-w*0.42,groundY,w*0.84,10);
+  ctx.strokeStyle=CSSV.ground; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx-w*0.42,groundY); ctx.lineTo(cx+w*0.42,groundY); ctx.stroke();
+  const off=((simT*M.v*sc)%40+40)%40;
+  ctx.strokeStyle=CSSV.bg; ctx.lineWidth=2;
+  for(let x=cx-w*0.42+40-off;x<cx+w*0.42;x+=40){ ctx.beginPath(); ctx.moveTo(x,groundY+2); ctx.lineTo(x-6,groundY+8); ctx.stroke(); }
+  ctx.fillStyle=CSSV.ink3; ctx.font="12px IBM Plex Mono, monospace"; ctx.textAlign="left";
+  ctx.fillText(`ลู่วิ่ง ${M.v.toFixed(2)} m/s  ←`,cx-w*0.42,groundY+28);
+  ctx.textAlign="right"; ctx.fillText(`t = ${simT.toFixed(1)} s`,cx+w*0.42,groundY+28);
+
+  // trunk
+  const lean=(M.lean)*rad, trunkL=0.288*H*sc;
+  const sh=[hipX+Math.sin(lean)*trunkL, hipY-Math.cos(lean)*trunkL];
+  const headR=0.065*H*sc;
+  const near="L", far="R";
+  const drawLeg=(sd,alpha)=>{
+    const P=legPoints(hipX,hipY,A[sd],H,sc,dir), col=sd==="R"?CSSV.right:CSSV.left;
+    const isAmp=M.amp && sd===M.ampSide;
+    ctx.globalAlpha=alpha; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.strokeStyle=col; ctx.lineWidth=9;
+    ctx.beginPath(); ctx.moveTo(...P.hip); ctx.lineTo(...P.knee); ctx.stroke();
+    if(isAmp){
+      // socket + pylon
+      const mid=[P.knee[0]+(P.ankle[0]-P.knee[0])*0.4, P.knee[1]+(P.ankle[1]-P.knee[1])*0.4];
+      ctx.strokeStyle=col; ctx.lineWidth=11; ctx.beginPath(); ctx.moveTo(...P.knee); ctx.lineTo(...mid); ctx.stroke();
+      ctx.strokeStyle=CSSV.pros; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(...mid); ctx.lineTo(...P.ankle); ctx.stroke();
+      ctx.fillStyle=CSSV.pros; ctx.beginPath(); ctx.moveTo(...P.ankle); ctx.lineTo(...P.heel); ctx.lineTo(...P.toe); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.moveTo(...P.knee); ctx.lineTo(...P.ankle); ctx.stroke();
+      ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(...P.ankle); ctx.lineTo(...P.heel); ctx.lineTo(...P.toe); ctx.closePath(); ctx.stroke();
+    }
+    ctx.fillStyle=CSSV.panel; ctx.strokeStyle=col; ctx.lineWidth=2;
+    for(const j of [P.knee,P.ankle]){ ctx.beginPath(); ctx.arc(j[0],j[1],4,0,7); ctx.fill(); ctx.stroke(); }
+    // IMUs
+    if(M.amp){
+      const sel=new Set([...rowFor("L")[0].split("+"),...rowFor("R")[0].split("+")]);
+      const all=sel.has("ALL16");
+      for(const code of Object.keys(IMU_SEG)){
+        if(!(all||sel.has(code))) continue;
+        const [s2,segm]=IMU_SEG[code]; if(s2!==sd) continue;
+        const a=segm==="thigh"?[P.hip,P.knee,0.5]:segm==="shank"?[P.knee,P.ankle,0.45]:[P.heel,P.toe,0.55];
+        const x=a[0][0]+(a[1][0]-a[0][0])*a[2], y=a[0][1]+(a[1][1]-a[0][1])*a[2];
+        ctx.fillStyle=CSSV.imu; ctx.fillRect(x-5,y-5,10,10);
+        ctx.fillStyle=CSSV.ink2; ctx.font="10px IBM Plex Mono, monospace"; ctx.textAlign="left"; ctx.fillText(code,x+8,y+3);
+      }
+    }
+    // contact indicator
+    if(legPhase(sd).p<M.legs[sd].sf){ ctx.fillStyle=col; ctx.globalAlpha=alpha*0.35; ctx.fillRect(Math.min(P.heel[0],P.toe[0])-4,groundY+12,Math.abs(P.toe[0]-P.heel[0])+8,4); }
+    ctx.globalAlpha=1;
+  };
+  // arms (far arm behind)
+  const arm=(sd,alpha)=>{
+    const opp=sd==="R"?"L":"R"; const sw=(A[opp].hip-10)*0.7*rad; // arm swings with contralateral hip
+    const ua=0.186*H*sc, fa=0.19*H*sc;
+    const el=[sh[0]+Math.sin(sw)*ua, sh[1]+Math.cos(sw)*ua];
+    const fa2=sw+ (18+Math.max(0,sw/rad)*0.6)*rad;
+    const wr=[el[0]+Math.sin(fa2)*fa, el[1]+Math.cos(fa2)*fa];
+    ctx.globalAlpha=alpha; ctx.strokeStyle=CSSV.skin; ctx.lineWidth=7; ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(...sh); ctx.lineTo(...el); ctx.lineTo(...wr); ctx.stroke(); ctx.globalAlpha=1;
+  };
+  arm(far,0.45); drawLeg(far,0.5);
+  ctx.strokeStyle=CSSV.ink2; ctx.lineWidth=12; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(hipX,hipY); ctx.lineTo(...sh); ctx.stroke();
+  ctx.fillStyle=CSSV.skin; ctx.beginPath(); ctx.arc(sh[0]+Math.sin(lean)*headR*1.6, sh[1]-headR*1.5, headR,0,7); ctx.fill();
+  drawLeg(near,1); arm(near,1);
+  ctx.fillStyle=CSSV.ink; ctx.beginPath(); ctx.arc(hipX,hipY,5,0,7); ctx.fill();
+}
+
+// ---------------- Frontal view ----------------
+function drawFront(){
+  const c=$("front"), {ctx,w,h}=fit(c); ctx.clearRect(0,0,w,h);
+  const H=S.ht/100, groundY=h-46, sc=(h-80)/(H*1.08), cx=w/2, ex=S.exag;
+  const A={R:angles(M.legs.R,legPhase("R").p), L:angles(M.legs.L,legPhase("L").p)};
+  // vertical extents to keep stance foot on ground
+  const Lt=0.245*H*sc, Ls=0.246*H*sc, ah=0.039*H*sc;
+  const vert=(a)=>Lt*Math.cos(a.hip*rad)+Ls*Math.cos((a.hip-a.knee)*rad)+ah;
+  const hipY=groundY-Math.max(vert(A.R),vert(A.L));
+  const hw=Math.max(0.085*H*sc, M.stepW*sc*0.5+6);
+  // trunk lateral lean toward prosthetic side during its stance
+  let tl=0; if(M.amp){ const sd=M.ampSide; if(legPhase(sd).p<M.legs[sd].sf) tl=(sd==="R"?-1:1)*4*Math.sin(Math.PI*legPhase(sd).p/M.legs[sd].sf); }
+  ctx.strokeStyle=CSSV.ground; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(16,groundY); ctx.lineTo(w-16,groundY); ctx.stroke();
+  const trunkL=0.288*H*sc, shY=hipY-trunkL, shX=cx+Math.sin(tl*rad)*trunkL;
+  ctx.strokeStyle=CSSV.ink2; ctx.lineWidth=12; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(cx,hipY); ctx.lineTo(shX,shY); ctx.stroke();
+  ctx.lineWidth=8; ctx.beginPath(); ctx.moveTo(cx-hw,hipY); ctx.lineTo(cx+hw,hipY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(shX-0.11*H*sc,shY+6); ctx.lineTo(shX+0.11*H*sc,shY+6); ctx.stroke();
+  ctx.fillStyle=CSSV.skin; ctx.beginPath(); ctx.arc(shX,shY-0.1*H*sc,0.065*H*sc,0,7); ctx.fill();
+  for(const sd of ["R","L"]){
+    const a=A[sd], L=M.legs[sd], col=sd==="R"?CSSV.right:CSSV.left;
+    const lat = sd==="R"?-1:1; // person faces viewer: right leg on viewer's left
+    const hip=[cx+lat*hw,hipY];
+    const tLen=Lt*Math.cos(a.hip*rad), sLen=Ls*Math.cos((a.hip-a.knee)*rad);
+    const footX=cx+lat*(M.stepW*sc*0.5);
+    const thAng=Math.atan2(footX-hip[0], tLen+sLen); // thigh roughly toward foot line
+    const knee=[hip[0]+Math.sin(thAng)*tLen*1.0, hip[1]+Math.cos(thAng)*tLen];
+    const va=a.varus*ex*rad; // varus: distal segment angled medially
+    const shAng=thAng - lat*va;
+    const ankle=[knee[0]+Math.sin(shAng)*sLen, knee[1]+Math.cos(shAng)*sLen];
+    const isAmp=M.amp&&sd===M.ampSide;
+    ctx.lineCap="round"; ctx.strokeStyle=col; ctx.lineWidth=10;
+    ctx.beginPath(); ctx.moveTo(...hip); ctx.lineTo(...knee); ctx.stroke();
+    if(isAmp){ const mid=[knee[0]+(ankle[0]-knee[0])*0.4,knee[1]+(ankle[1]-knee[1])*0.4];
+      ctx.lineWidth=12; ctx.beginPath(); ctx.moveTo(...knee); ctx.lineTo(...mid); ctx.stroke();
+      ctx.strokeStyle=CSSV.pros; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(...mid); ctx.lineTo(...ankle); ctx.stroke();
+    } else { ctx.beginPath(); ctx.moveTo(...knee); ctx.lineTo(...ankle); ctx.stroke(); }
+    // foot (toe-in shown by IR)
+    const ir=a.ir*ex*rad;
+    ctx.fillStyle=isAmp?CSSV.pros:col; ctx.globalAlpha=0.85;
+    ctx.beginPath(); ctx.ellipse(ankle[0]-lat*Math.sin(ir)*10, ankle[1]+ah*0.7, 11, 6, 0, 0, 7); ctx.fill(); ctx.globalAlpha=1;
+    // patella shifted medially by internal rotation
+    const pr=9, px=knee[0]-lat*Math.sin(clamp(ir,-1.4,1.4))*pr;
+    ctx.fillStyle=CSSV.panel; ctx.strokeStyle=col; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(knee[0],knee[1],pr,0,7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=col; ctx.beginPath(); ctx.arc(px,knee[1],3.5,0,7); ctx.fill();
+    // label
+    ctx.fillStyle=CSSV.ink2; ctx.font="11.5px IBM Plex Mono, monospace"; ctx.textAlign=lat<0?"right":"left";
+    const tx=knee[0]+lat*18;
+    ctx.fillText(`varus ${a.varus.toFixed(1)}°`,tx,knee[1]-4);
+    ctx.fillText(`IR ${a.ir.toFixed(1)}°`,tx,knee[1]+12);
+    ctx.fillStyle=col; ctx.font="600 12px IBM Plex Sans Thai, sans-serif";
+    ctx.fillText(sd==="R"?"ขวา":"ซ้าย",tx,knee[1]-22);
+  }
+  ctx.fillStyle=CSSV.ink3; ctx.font="11.5px IBM Plex Sans Thai, sans-serif"; ctx.textAlign="center";
+  ctx.fillText(`ผู้เดินหันหน้าเข้าหาผู้ชม · มุมในภาพขยาย ${ex}× · จุดบนเข่า = ลูกสะบ้า`,cx,groundY+26);
+}
+
+// ---------------- Charts ----------------
+function chart(id,key,opts={}){
+  const c=$(id), {ctx,w,h}=fit(c); ctx.clearRect(0,0,w,h);
+  const pl=34,pr=8,pt=8,pb=20, W=w-pl-pr, Hh=h-pt-pb;
+  const all=[...CUR.R[key],...CUR.L[key],...REFC.R[key]];
+  let lo=Math.min(...all), hi=Math.max(...all); const pad=(hi-lo)*0.1||1; lo-=pad; hi+=pad;
+  if(opts.zero) lo=Math.min(0,lo);
+  const X=(i)=>pl+i/100*W, Y=(v)=>pt+(1-(v-lo)/(hi-lo))*Hh;
+  ctx.strokeStyle=CSSV.grid; ctx.lineWidth=1; ctx.fillStyle=CSSV.ink3; ctx.font="10px IBM Plex Mono, monospace";
+  const step=niceStep((hi-lo)/4);
+  ctx.textAlign="right";
+  for(let v=Math.ceil(lo/step)*step; v<=hi; v+=step){ ctx.beginPath(); ctx.moveTo(pl,Y(v)); ctx.lineTo(w-pr,Y(v)); ctx.stroke(); ctx.fillText(fmt(v),pl-4,Y(v)+3); }
+  ctx.textAlign="center"; for(const i of [0,20,40,60,80,100]) ctx.fillText(i+"%",X(i),h-5);
+  if(lo<0&&hi>0){ ctx.strokeStyle=CSSV.ink3; ctx.globalAlpha=.5; ctx.beginPath(); ctx.moveTo(pl,Y(0)); ctx.lineTo(w-pr,Y(0)); ctx.stroke(); ctx.globalAlpha=1; }
+  const line=(arr,col,dash,lw)=>{ ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.setLineDash(dash||[]); ctx.beginPath();
+    arr.forEach((v,i)=>i?ctx.lineTo(X(i),Y(v)):ctx.moveTo(X(i),Y(v))); ctx.stroke(); ctx.setLineDash([]); };
+  line(REFC.R[key],CSSV.ref,[4,3],1.5);
+  line(CUR.L[key],CSSV.left,null,2);
+  line(CUR.R[key],CSSV.right,null,2);
+  for(const sd of ["R","L"]){ const p=legPhase(sd).p*100, v=CUR[sd][key][Math.round(p)];
+    ctx.fillStyle=sd==="R"?CSSV.right:CSSV.left; ctx.beginPath(); ctx.arc(X(p),Y(v),4,0,7); ctx.fill(); }
+}
+function niceStep(x){ const e=Math.pow(10,Math.floor(Math.log10(x))), f=x/e; return (f<1.5?1:f<3?2:f<7?5:10)*e; }
+function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):Math.abs(v)<1&&v!==0?v.toFixed(1):(+v.toFixed(1)).toString(); }
+
+function drawContact(){
+  const c=$("contact"), {ctx,w,h}=fit(c); ctx.clearRect(0,0,w,h);
+  const pl=88,pr=10,pt=6,pb=22, W=w-pl-pr, lanes=["L","R"], laneH=(h-pt-pb)/2;
+  const t0=simT-4, X=(t)=>pl+(t-t0)/4*W;
+  ctx.font="12px IBM Plex Sans Thai, sans-serif";
+  lanes.forEach((sd,li)=>{
+    const y0=pt+li*laneH, col=sd==="R"?CSSV.right:CSSV.left;
+    const top=y0+10, bot=y0+laneH-12;
+    ctx.fillStyle=col; ctx.textAlign="left";
+    ctx.fillText((sd==="R"?"ขวา ":"ซ้าย ")+(M.amp?(sd===M.ampSide?"AMP":"SOU"):""),4,(top+bot)/2+4);
+    ctx.strokeStyle=CSSV.grid; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pl,bot); ctx.lineTo(w-pr,bot); ctx.stroke();
+    // ref filled
+    ctx.fillStyle=CSSV.ref; ctx.globalAlpha=0.35;
+    let st=null;
+    for(let i=0;i<=history.length;i++){ const a=history[i], on=a&&a["ref"+sd];
+      if(on&&st===null) st=a.t;
+      if(!on&&st!==null){ const end=a?a.t:simT; ctx.fillRect(X(st),top,X(end)-X(st),bot-top); st=null; } }
+    ctx.globalAlpha=1;
+    if(M.amp){
+      ctx.strokeStyle=CSSV.accent; ctx.lineWidth=2; ctx.beginPath();
+      history.forEach((s,i)=>{ const y=s["pre"+sd]?top+3:bot-1; i?ctx.lineTo(X(s.t),y):ctx.moveTo(X(s.t),y); }); ctx.stroke();
+      for(const e of evMarks){ if(e.sd!==sd||e.t<t0) continue; const x=X(e.t+e.e);
+        ctx.fillStyle=CSSV.accent; ctx.beginPath();
+        if(e.type==="IC"){ ctx.moveTo(x,bot+1); ctx.lineTo(x-4,bot+8); ctx.lineTo(x+4,bot+8);} else { ctx.moveTo(x,top-1); ctx.lineTo(x-4,top-8); ctx.lineTo(x+4,top-8);} ctx.fill();
+        ctx.fillStyle=CSSV.ink3; ctx.font="10px IBM Plex Mono, monospace"; ctx.textAlign="center";
+        ctx.fillText(`${e.e>=0?"+":""}${(e.e*1000).toFixed(0)}`,x,e.type==="IC"?bot+18:top-10>y0?top-10:top+12);
+      }
+      ctx.font="12px IBM Plex Sans Thai, sans-serif";
+    }
+  });
+  ctx.fillStyle=CSSV.ink3; ctx.font="10px IBM Plex Mono, monospace"; ctx.textAlign="center";
+  for(let t=Math.ceil(t0);t<=simT;t++) ctx.fillText(t+" s",X(t),h-4);
+  if(!M.amp){ ctx.fillStyle=CSSV.ink3; ctx.font="12px IBM Plex Sans Thai, sans-serif"; ctx.textAlign="right"; ctx.fillText("โหมดปกติ: แสดงเฉพาะค่าจริง",w-pr,14); }
+}
+
+// ---------------- Loop ----------------
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(S.playing){ const sub=4; for(let i=0;i<sub;i++) step(dt*S.anim/sub); }
+  drawSag(); drawFront();
+  chart("cHip","hip"); chart("cKnee","knee"); chart("cAnk","ank"); chart("chVar","varus"); chart("chIR","ir"); chart("cGRF","grf",{zero:true});
+  drawContact();
+  if(++evTick%15===0) renderEvTable();
+  requestAnimationFrame(frame);
+}
+resetEvents(); recompute();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
