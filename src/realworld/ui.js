@@ -1,5 +1,5 @@
 // Real World mode: video in, pose extraction, gait analysis, results out.
-import { createLandmarker, extractPoses, ensureDuration } from "./pose.js";
+import { createLandmarker, extractPoses, ensureDuration, HAS_HEAVY } from "./pose.js";
 import { analyze, mean } from "./analyze.js";
 import { LM, BONES } from "./landmarks.js";
 import { drawCompare, attachHover, drawTimeline, fit } from "../charts.js";
@@ -17,6 +17,9 @@ const RIGHT_IDS = new Set([LM.shR, LM.elR, LM.wrR, LM.hipR, LM.kneeR, LM.ankR, L
 export function initRW(api) {
   const $ = (id) => document.getElementById(id);
   const v = $("rwVideo"), ov = $("rwOverlay");
+  const ENV = window.__GAIT_ENV || {};
+  if (!HAS_HEAVY) { const h = $("rwQ").querySelector('option[value="heavy"]'); if (h) h.remove(); }
+  if (ENV.artifact) $("rwExport").textContent = "คัดลอกผล (CSV) ไปวางในแอปตาราง";
   const st = { url: null, rec: null, R: null, o: null, swap: false, busy: false, ctrl: null, demo: false, demoT: 0, demoPlay: false, liveLm: null, name: "" };
 
   // ---------------------------------------------------------------- input
@@ -373,11 +376,36 @@ export function initRW(api) {
     lines.push(`score,${R.score}`, `verdict,${R.verdict.th}`, `reliability,${R.reliability}`, `cadence_spm,${f(R.st.cadence, 1)}`, `stance_L_pct,${f(R.st.stance.L, 1)}`, `stance_R_pct,${f(R.st.stance.R, 1)}`);
     if (R.view === "side") lines.push(`speed_mps,${f(R.st.speed, 3)}`, `step_L_m,${f(R.st.stepLen.L, 3)}`, `step_R_m,${f(R.st.stepLen.R, 3)}`);
     for (const it of R.items) lines.push(`"${it.title}",${it.status}`);
-    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const text = lines.join("\n"), BOM = String.fromCharCode(0xfeff);
+    if (ENV.artifact) {
+      // inside an artifact viewer pages cannot start downloads: offer the file through the viewer, else copy it
+      if (saver) {
+        saver.save({ filename: "gait-analysis.csv", data: BOM + text }).catch((e) => {
+          const code = e && e.code;
+          if (code === "declined") return;
+          if (code === "rate_limited") { exportNote("มีหน้าต่างบันทึกไฟล์เปิดอยู่แล้ว ลองอีกครั้งในอีกสักครู่"); return; }
+          showCsv(text);
+        });
+      } else copyCsv(text);
+      return;
+    }
+    const blob = new Blob([BOM + text], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = "gait-analysis.csv"; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   });
+  let saver = null;
+  if (ENV.artifact && window.claude && window.claude.use) window.claude.use("downloads").then((d) => { saver = d; if (d) $("rwExport").textContent = "ดาวน์โหลดผล (CSV)"; }, () => {});
+  const exportNote = (t) => { const b = $("rwExport"), old = b.dataset.label || b.textContent; b.dataset.label = old; b.textContent = t; setTimeout(() => { b.textContent = b.dataset.label; }, 2600); };
+  function showCsv(text) {
+    let ta = $("rwCsv");
+    if (!ta) { ta = document.createElement("textarea"); ta.id = "rwCsv"; ta.readOnly = true; ta.className = "csvbox"; ta.setAttribute("aria-label", "ผลวิเคราะห์ CSV"); $("rwExport").after(ta); }
+    ta.value = text; ta.hidden = false; ta.focus(); ta.select();
+  }
+  function copyCsv(text) {
+    try { navigator.clipboard.writeText(text).then(() => exportNote("คัดลอกแล้ว · วางในแอปตารางได้เลย"), () => showCsv(text)); }
+    catch (e) { showCsv(text); }
+  }
   $("rwToSim").addEventListener("click", () => { if (st.R && st.R.ok) api.onToSim && api.onToSim(st.R, st.o); });
 
   // ---------------------------------------------------------------- per-frame hook

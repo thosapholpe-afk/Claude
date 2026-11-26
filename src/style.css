@@ -368,6 +368,7 @@ select:focus,input:focus{outline:2px solid rgba(58,169,255,.5);outline-offset:1p
 .relbar i{display:block;height:100%;border-radius:8px}
 #rwRel ul{margin:0;padding-left:18px;color:var(--ink2);font-size:13px;display:grid;gap:4px}
 .rw-next{display:grid;gap:8px}
+.csvbox{width:100%;min-height:140px;background:#061020;color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:8px;font-family:var(--f-mono);font-size:11.5px}
 
 /* ---------- responsive ---------- */
 @media (max-width:1100px){.charts{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -379,25 +380,25 @@ select:focus,input:focus{outline:2px solid rgba(58,169,255,.5);outline-offset:1p
 }
 @media (max-width:900px){
   .hero{height:auto;min-height:0;display:flex;flex-direction:column}
-  .topbar{position:relative;grid-template-columns:auto 1fr;background:#03070f;padding:10px 12px}
+  .topbar{position:relative;grid-template-columns:auto 1fr;background:#03070f;padding:10px 16px}
   .topbar .modes{justify-self:end}
   .topbar .tools{grid-column:1/-1;justify-self:stretch;justify-content:space-between}
   .stagebox{position:relative;inset:auto;height:62vh;min-height:380px}
-  .viewbar,.rwlegend{top:10px;left:10px}
-  .mhud{right:10px;top:auto;bottom:70px;width:min(280px,calc(100% - 20px))}
-  .hud-bottom{grid-template-columns:minmax(0,1fr);padding:10px}
+  .viewbar,.rwlegend{top:10px;left:16px}
+  .mhud{right:16px;top:auto;bottom:70px;width:min(280px,calc(100% - 32px))}
+  .hud-bottom{grid-template-columns:minmax(0,1fr);padding:10px 16px}
   .hud-bottom .transport{grid-column:1;justify-self:center}
   .roster{display:none}
   .hint,.callout{display:none}
   .hero[data-mode=rw]{display:flex;flex-direction:column}
   .hero[data-mode=rw] .stagebox{height:48vh;min-height:320px;border-left:0;border-top:1px solid var(--line)}
-  .rwp{padding:14px 14px 18px}
+  .rwp{padding:14px 16px 18px}
   .scorecard{grid-template-columns:auto minmax(0,1fr)}
   .scorecard .kpis{grid-column:1/-1}
 }
 @media (max-width:620px){
   .charts{grid-template-columns:minmax(0,1fr)}
-  .deck{padding:14px 14px 56px}
+  .deck{padding:14px 16px 56px}
   .rw-form{grid-template-columns:repeat(2,minmax(0,1fr))}
   .people{grid-template-columns:minmax(0,1fr)}
   .frm{grid-template-columns:minmax(0,1fr)}

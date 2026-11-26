@@ -4,14 +4,18 @@
 
 const VER = "0.10.21";
 const qs = new URLSearchParams(location.search);
-const LIB_BASES = [qs.get("mp"), `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VER}`, `https://unpkg.com/@mediapipe/tasks-vision@${VER}`].filter(Boolean);
-const MODEL_BASE = qs.get("mpmodel") || "https://storage.googleapis.com/mediapipe-models/pose_landmarker";
+// a host can ship the runtime and models beside the page (window.__GAIT_ENV, set by the artifact build)
+const ENV = window.__GAIT_ENV || {};
+const abs = (p) => { try { return new URL(p, document.baseURI).href.replace(/\/$/, ""); } catch (e) { return p; } };
+const LIB_BASES = [qs.get("mp"), ENV.mpBase && abs(ENV.mpBase), `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VER}`, `https://unpkg.com/@mediapipe/tasks-vision@${VER}`].filter(Boolean);
+const MODEL_LOCAL = qs.get("mpmodel") || (ENV.mpModel && abs(ENV.mpModel)) || null;
 export const MODELS = {
   lite: { file: "pose_landmarker_lite", mb: 5.8, th: "เร็ว" },
   full: { file: "pose_landmarker_full", mb: 9.4, th: "มาตรฐาน" },
   heavy: { file: "pose_landmarker_heavy", mb: 30.7, th: "ละเอียดสุด" },
 };
-const modelUrl = (q) => (qs.get("mpmodel") ? `${MODEL_BASE}/${MODELS[q].file}.task` : `${MODEL_BASE}/${MODELS[q].file}/float16/1/${MODELS[q].file}.task`);
+export const HAS_HEAVY = ENV.heavy !== false;
+const modelUrl = (q) => (MODEL_LOCAL ? `${MODEL_LOCAL}/${MODELS[q].file}${ENV.modelExt || ".task"}` : `https://storage.googleapis.com/mediapipe-models/pose_landmarker/${MODELS[q].file}/float16/1/${MODELS[q].file}.task`);
 
 let lib = null;
 const modelBufs = {};
