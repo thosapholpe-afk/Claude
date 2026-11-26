@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 
 const js = await build({
   entryPoints: ["src/main.js"], bundle: true, minify: true, format: "iife",
-  target: "es2020", write: false, legalComments: "none",
+  target: "es2020", write: false, legalComments: "none", loader: { ".bin": "binary" },
 });
 const code = js.outputFiles[0].text.replace(/<\/script/gi, "<\\/script");
 const css = readFileSync("src/style.css", "utf8");

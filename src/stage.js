@@ -53,12 +53,7 @@ export class Stage {
     this.rimA = new THREE.DirectionalLight(0x3388ff, 2); sc.add(this.rimA);
     this.rimB = new THREE.DirectionalLight(0x66ddff, 1); sc.add(this.rimB);
 
-    this.lanes = [new THREE.Group(), new THREE.Group()];
-    for (const l of this.lanes) sc.add(l);
-    this.laneTarget = [new THREE.Vector3(-1.3, 0, -0.6), new THREE.Vector3(1.3, 0, 0.6)];
-    this.merged = 0; this.mergeTarget = 0;
-    this.arrows = [[makeArrow(new THREE.Color(2.2, 2.6, 3.0)), makeArrow(new THREE.Color(2.2, 2.6, 3.0))], [makeArrow(new THREE.Color(0.3, 1.5, 3.2)), makeArrow(new THREE.Color(0.3, 1.5, 3.2))]];
-    for (const pair of this.arrows) for (const a of pair) sc.add(a);
+    this.arrows = new Map();
 
     const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(r, rt);
@@ -77,7 +72,7 @@ export class Stage {
       const d = Math.hypot(e.clientX - this._pd[0], e.clientY - this._pd[1]); this._pd = null;
       if (d > 6) return;
       const hit = this.pick(e);
-      if (this.onPick) this.onPick(hit ? hit.object.userData : null, e);
+      if (this.onPick) this.onPick(hit, e);
     });
     let lastHover = 0;
     canvas.addEventListener("pointermove", (e) => {
@@ -86,7 +81,7 @@ export class Stage {
       lastHover = now;
       const hit = this.pick(e);
       canvas.style.cursor = hit ? "pointer" : "grab";
-      if (this.onHover) this.onHover(hit ? hit.object.userData : null, e);
+      if (this.onHover) this.onHover(hit, e);
     });
     canvas.addEventListener("pointerleave", () => { if (this.onHover) this.onHover(null); });
 
@@ -140,28 +135,38 @@ export class Stage {
     });
   }
 
-  view(name) {
+  arrowsFor(key, color) {
+    if (!this.arrows.has(key)) {
+      const c = new THREE.Color(color).multiplyScalar(2.6);
+      const pair = { R: makeArrow(c), L: makeArrow(c) };
+      this.scene.add(pair.R); this.scene.add(pair.L);
+      this.arrows.set(key, pair);
+    }
+    return this.arrows.get(key);
+  }
+  removeArrows(key) {
+    const p = this.arrows.get(key);
+    if (!p) return;
+    for (const a of [p.R, p.L]) { a.removeFromParent(); a.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); }
+    this.arrows.delete(key);
+  }
+
+  view(name, scale = 1) {
     const P = {
       cine: [[4.4, 1.5, 5.4], [0, 0.85, 0]],
       side: [[0, 1.0, 7.2], [0, 0.85, 0]],
       front: [[7.0, 1.2, 0.0], [0, 0.85, 0]],
       back: [[-6.5, 1.6, 2.2], [0, 0.85, 0]],
       low: [[2.2, 0.25, 3.2], [0, 0.55, 0]],
-      close: [[1.4, 1.15, 2.3], [0, 0.8, 0]],
+      close: [[1.5, 1.2, 2.4], [0, 0.85, 0]],
     }[name];
     if (!P) return;
-    this.camTween = { t: 0, p0: this.camera.position.clone(), q0: this.controls.target.clone(), p1: new THREE.Vector3(...P[0]), q1: new THREE.Vector3(...P[1]) };
-  }
-
-  setLayout(lanes, merged) {
-    this.laneTarget = lanes.map((v) => new THREE.Vector3(...v));
-    this.mergeTarget = merged ? 1 : 0;
+    const q1 = new THREE.Vector3(...P[1]), p1 = new THREE.Vector3(...P[0]).sub(q1).multiplyScalar(scale).add(q1);
+    this.camTween = { t: 0, p0: this.camera.position.clone(), q0: this.controls.target.clone(), p1, q1 };
   }
 
   update(dt, t, ctx) {
     this.U.uTime.value = t;
-    this.merged += (this.mergeTarget - this.merged) * Math.min(1, dt * 5);
-    for (let i = 0; i < 2; i++) this.lanes[i].position.lerp(this.laneTarget[i], Math.min(1, dt * 5));
     if (this.camTween) {
       const c = this.camTween; c.t = Math.min(1, c.t + dt / 1.1);
       const e = c.t < 0.5 ? 4 * c.t ** 3 : 1 - (-2 * c.t + 2) ** 3 / 2;
@@ -169,11 +174,11 @@ export class Stage {
       if (c.t >= 1) this.camTween = null;
     }
     this.controls.update();
-    if (this.env) this.env.update(ctx.envDt ?? dt, t, { ...ctx, lanes: this.lanes, merged: this.merged });
+    if (this.env) this.env.update(ctx.envDt ?? dt, t, ctx);
   }
 
-  setArrow(i, side, visible, pos, F, BW, s) {
-    const a = this.arrows[i][side === "R" ? 0 : 1], u = a.userData;
+  setArrow(a, visible, pos, F, BW, s) {
+    const u = a.userData;
     a.visible = visible;
     if (!visible) return;
     const len = Math.max(0.01, (F / BW) * 0.55);

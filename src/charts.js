@@ -13,7 +13,14 @@ function fmt(v) { return Math.abs(v) >= 100 ? v.toFixed(0) : (+v.toFixed(2)).toS
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
 // series: [{data(101), color, dash, glow}], toeOff: [{x, color}], cursors: [{x, y, color}]
-export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false, diff = null, bands = false, lo: fLo, hi: fHi, pct = false }) {
+// hover: crosshair + tooltip (set by attachHover)
+export function attachHover(c) {
+  if (c._hoverAttached) return;
+  c._hoverAttached = true;
+  c.addEventListener("pointermove", (e) => { const r = c.getBoundingClientRect(); c._hover = { x: e.clientX - r.left, y: e.clientY - r.top }; });
+  c.addEventListener("pointerleave", () => { c._hover = null; });
+}
+export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false, diff = null, bands = false, lo: fLo, hi: fHi, pct = false, unit = "", dp = 1 }) {
   const { ctx, w, h } = fit(c);
   ctx.clearRect(0, 0, w, h);
   const pl = 38, pr = 8, pt = bands ? 22 : 10, pb = 20, W = w - pl - pr, H = h - pt - pb;
@@ -65,9 +72,29 @@ export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false
     ctx.restore();
   }
   for (const k of cursors) {
-    ctx.save(); ctx.strokeStyle = k.color; ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.moveTo(X(k.x), pt); ctx.lineTo(X(k.x), pt + H); ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.fillStyle = k.color; ctx.shadowColor = k.color; ctx.shadowBlur = 10;
-    ctx.beginPath(); ctx.arc(X(k.x), Y(k.y), 3.8, 0, 7); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.fillStyle = k.color; ctx.strokeStyle = "#081325"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(X(k.x), Y(k.y), 4.5, 0, 7); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
+  const hv = c._hover;
+  if (hv && hv.x >= pl && hv.x <= w - pr) {
+    const i = Math.max(0, Math.min(100, Math.round(((hv.x - pl) / W) * 100)));
+    ctx.save();
+    ctx.strokeStyle = "rgba(220,235,255,0.55)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(X(i), pt); ctx.lineTo(X(i), pt + H); ctx.stroke(); ctx.setLineDash([]);
+    const rows = series.filter((s) => s.label).map((s) => ({ s, v: s.data[i] }));
+    for (const { s, v } of rows) { ctx.fillStyle = s.color; ctx.strokeStyle = "#081325"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(i), Y(v), 4, 0, 7); ctx.fill(); ctx.stroke(); }
+    ctx.font = `11px ${MONO}`;
+    const lines = rows.map(({ s, v }) => `${s.label}  ${pct ? Math.round(v * 100) + "%" : v.toFixed(dp)}${pct ? "" : unit}`);
+    const bw = Math.max(70, ...lines.map((l) => ctx.measureText(l).width)) + 30, bh = 20 + lines.length * 16;
+    let bx = X(i) + 12, by = Math.max(pt, Math.min(hv.y - bh / 2, pt + H - bh));
+    if (bx + bw > w - pr) bx = X(i) - 12 - bw;
+    ctx.fillStyle = "rgba(4,12,26,0.92)"; ctx.strokeStyle = "rgba(120,190,255,0.3)"; ctx.fillRect(bx, by, bw, bh); ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    ctx.fillStyle = "#9fb6d2"; ctx.textAlign = "left"; ctx.fillText(`${i}% ของรอบการเดิน`, bx + 9, by + 14);
+    rows.forEach(({ s }, k) => {
+      ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(bx + 12, by + 27 + k * 16, 4, 0, 7); ctx.fill();
+      ctx.fillStyle = "#eaf4ff"; ctx.fillText(lines[k], bx + 21, by + 31 + k * 16);
+    });
+    ctx.restore();
   }
 }
 

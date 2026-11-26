@@ -57,6 +57,7 @@ function holoTexture(title, seed) {
 
 class Treadmill {
   constructor(accent, label) {
+    this.glowMat = null;
     this.group = new THREE.Group();
     const dark = new THREE.MeshPhysicalMaterial({ color: 0x0a0f18, metalness: 0.8, roughness: 0.3, clearcoat: 0.7 });
     const base = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.13, 0.86), dark);
@@ -67,14 +68,14 @@ class Treadmill {
       const b = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.34), beltMat);
       b.rotation.x = -Math.PI / 2; b.position.set(0, 0.0015, z); b.receiveShadow = true; this.group.add(b);
     }
-    const glow = new THREE.MeshBasicMaterial({ color: accent === 0 ? new THREE.Color(2.2, 2.6, 3.0) : new THREE.Color(0.3, 1.5, 3.2), toneMapped: false });
+    const glow = (this.glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 1.5, 3.2), toneMapped: false }));
     for (const z of [-0.425, 0.425]) { const s = new THREE.Mesh(new THREE.BoxGeometry(2.46, 0.012, 0.008), glow); s.position.set(0, -0.02, z); this.group.add(s); }
     const gap = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.004, 0.012), glow); gap.position.set(0, 0.001, 0); this.group.add(gap);
     for (const x of [-1.15, 1.15]) {
       const r = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.84, 32), dark);
       r.rotation.x = Math.PI / 2; r.position.set(x, -0.045, 0); this.group.add(r);
     }
-    const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: labelTexture(label[0], label[1], accent === 0 ? "#eaf6ff" : "#2fb8ff"), transparent: true, depthWrite: false, opacity: 0.9 }));
+    const lab = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.3), new THREE.MeshBasicMaterial({ map: labelTexture(label[0], label[1], "#eaf6ff"), transparent: true, depthWrite: false, opacity: 0.9 }));
     lab.rotation.x = -Math.PI / 2; lab.position.set(-0.6, FLOOR + 0.002, 0.66); this.group.add(lab);
     this.belt = 0;
   }
@@ -104,7 +105,7 @@ export class LabEnv extends Env {
       vertexShader: "varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv=uv; vec4 mv=modelViewMatrix*vec4(position,1.); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }",
       fragmentShader: "uniform vec3 uColor; varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ float f=pow(abs(dot(vN,vV)),2.0); float a=0.055*f*smoothstep(0.,0.9,vUv.y)*smoothstep(1.,0.6,vUv.y); gl_FragColor=vec4(uColor*a,a); }",
     });
-    this.cones = [0, 1].map(() => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 1.4, 5, 48, 1, true), coneMat); c.position.y = 2.4; this.add(c); return c; });
+    this.cones = [0, 1, 2, 3, 4, 5].map(() => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 1.4, 5, 48, 1, true), coneMat); c.position.y = 2.4; this.add(c); return c; });
     // body-scan rings + holographic field
     const scanMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 1.4, 3.0), toneMapped: false, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending });
     const fieldMat = new THREE.ShaderMaterial({
@@ -113,7 +114,7 @@ export class LabEnv extends Env {
       vertexShader: "varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ vUv=uv; vec4 mv=modelViewMatrix*vec4(position,1.); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }",
       fragmentShader: "uniform float uTime; varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main(){ float f=1.0-abs(dot(vN,vV)); float l=smoothstep(0.92,1.0,fract(vUv.y*24.0-uTime*0.4)); float a=(0.03+0.07*pow(f,3.0)+0.05*l)*smoothstep(1.0,0.75,vUv.y)*smoothstep(0.0,0.08,vUv.y); gl_FragColor=vec4(vec3(0.2,0.75,1.0)*a,a); }",
     });
-    this.scans = [0, 1].map(() => {
+    this.scans = [0, 1, 2, 3, 4, 5].map(() => {
       const g = new THREE.Group();
       const r = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.006, 8, 96), scanMat); r.rotation.x = Math.PI / 2; g.add(r);
       const f = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 2.2, 64, 1, true), fieldMat); f.position.y = 1.1; g.add(f);
@@ -129,19 +130,22 @@ export class LabEnv extends Env {
     });
     this.dust = new Ambient(this.U, 600, { box: [12, 4.5, 10], center: [0, 2.25, 0], fall: -0.03, wind: 0.02, swirl: 0.15, size: 0.012, color: [0.7, 0.9, 1.0], additive: true, scroll: 0, opacity: 0.6 });
     this.add(this.dust.points); this.fx.push(this.dust);
-    this.mills = [new Treadmill(0, ["TYPE 1", "LANE A · DUAL-BELT"]), new Treadmill(1, ["TYPE 2", "LANE B · DUAL-BELT"])];
+    this.mills = [1, 2, 3, 4, 5, 6].map((k) => new Treadmill(1, [`LANE ${k}`, "DUAL-BELT · 1000 Hz"]));
     for (const m of this.mills) this.add(m.group);
+    const tmpC = new THREE.Color();
     this.tick.push((dt, t, ctx) => {
-      ctx.lanes.forEach((ln, i) => {
-        this.mills[i].group.position.set(ln.position.x, 0, ln.position.z);
-        this.cones[i].position.set(ln.position.x, 2.4, ln.position.z);
+      this.mills.forEach((mill, i) => {
+        const ln = ctx.lanes[i], on = !!ln && (i === 0 || ctx.merged < 0.98);
+        mill.group.visible = on; this.cones[i].visible = on && (i === 0 || ctx.merged < 0.5);
         const sc = this.scans[i];
+        sc.visible = !!ln && ctx.figVisible[i] && !(i > 0 && ctx.merged > 0.5);
+        if (!ln) return;
+        mill.group.position.set(ln.position.x, 0, ln.position.z);
+        this.cones[i].position.set(ln.position.x, 2.4, ln.position.z);
         sc.position.set(ln.position.x, 0, ln.position.z);
         sc.userData.ring.position.y = 0.05 + (0.5 + 0.5 * Math.sin(t * 0.9 + i * 1.7)) * 1.9;
-        sc.visible = ctx.figVisible[i] && !(i === 1 && ctx.merged > 0.5);
+        if (ctx.colors && ctx.colors[i]) mill.glowMat.color.copy(tmpC.set(ctx.colors[i])).multiplyScalar(2.2);
       });
-      this.mills[1].group.visible = ctx.merged < 0.98;
-      this.cones[1].visible = ctx.merged < 0.5;
       this.panels.forEach((p, i) => { p.position.y = 2.6 + (i % 2) * 0.25 + Math.sin(t * 0.6 + i) * 0.04; p.material.map.offset.x = Math.sin(t * 0.2 + i) * 0.01; });
     });
   }
