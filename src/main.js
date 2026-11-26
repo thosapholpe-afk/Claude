@@ -5,6 +5,8 @@ import { model, curves, grf, phaseName, frac, COEF_DEFAULT } from "./model.js";
 import { SCENARIOS, SUBJECTS, T6 } from "./data.js";
 import { MUSCLES, MUSCLE, emgCurves, actNow, rawWindow } from "./emg.js";
 import { drawCompare, drawContact, drawScope, drawMatrix, attachHover } from "./charts.js";
+import { initRW, RW_COL } from "./realworld/ui.js";
+import { toMeas } from "./realworld/analyze.js";
 
 const $ = (id) => document.getElementById(id);
 // categorical palette (validated for the dark navy surface, fixed order, never cycled)
@@ -14,48 +16,58 @@ const coef = { ...COEF_DEFAULT };
 const S = {
   env: "lab", view: "lanes", focus: null, ghostOthers: false, playing: true, anim: 1, exag: 1, leg: "L", unit: "N",
   emg: false, grf: true, wind: 1, orbit: false, muscle: "VAS", emgSide: "L", selUid: null, selected: false, cam: "cine", merged: false,
+  mode: "sim", tab: { sim: "people", rw: "rw-sum" }, simFocus: null,
 };
+const CAM_NAMES = { cine: "มุมสวย", side: "ด้านข้าง", front: "ด้านหน้า", back: "ด้านหลัง", low: "มุมต่ำ", close: "ใกล้" };
 const ENV_NAMES = { lab: "ห้องแล็บ · DUAL-BELT TREADMILL", garden: "สวน · GARDEN", beach: "ชายหาด · BEACH", factory: "โรงงาน · FACTORY", snow: "หิมะ · SNOW FIELD" };
 const scen = (id) => SCENARIOS.find((s) => s.id === id);
 const newSim = (phi) => ({ phi, t: 0, hist: [], marks: { R: [], L: [] }, stride: { R: {}, L: {} }, stats: { R: { ic: [], fc: [] }, L: { ic: [], fc: [] } }, lock: null });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-let stage = null;
-let people = [], uidSeq = 1;
-const byUid = (u) => people.find((p) => p.uid === u);
+let stage = null, rw = null;
+let simPeople = [], rwPeople = [], people = simPeople, uidSeq = 1;
+const byUid = (u) => people.find((p) => p.uid === u) || simPeople.find((p) => p.uid === u) || rwPeople.find((p) => p.uid === u);
 const shown = () => people.filter((p) => p.show);
 const legLabel = (p, sd) => (p.m.amp ? (sd === p.m.ampSide ? "AMP" : "SOU") : sd === "L" ? "ซ้าย" : "ขวา");
 const sideName = (p, sd) => (sd === "L" ? "ขาซ้าย" : "ขาขวา") + (p.m.amp ? (sd === p.m.ampSide ? " (ขาเทียม)" : " (ขาดี)") : "");
 const rowFor = (p, sd) => (sd === p.m.ampSide ? T6.AMP[p.imuAmp] : T6.SOU[p.imuSou]);
 
 // ---------------------------------------------------------------- people
-function addPerson(scId, extra = {}) {
-  if (people.length >= MAX) return null;
-  const used = new Set(people.map((p) => p.slot));
-  let slot = 0;
-  while (used.has(slot)) slot++;
-  const sc = scen(scId);
-  const ref = people[0];
+function makePerson(set, { slot, color, name, scId = null, cfg, skin }) {
+  const ref = set[0];
   const p = {
-    uid: uidSeq++, slot, color: PALETTE[slot], name: extra.name || sc.name, scen: sc.id, cfg: { ...sc.cfg }, imuAmp: 6, imuSou: 7, show: true,
-    sim: newSim(ref ? (ref.sim.phi + 0.27 * people.length) : 0.13 * slot), fig: new Human(PALETTE[slot], slot % 4), lane: new THREE.Group(), laneTarget: new THREE.Vector3(),
+    uid: uidSeq++, slot, color, name, scen: scId, cfg, imuAmp: 6, imuSou: 7, show: true,
+    sim: newSim(ref ? (ref.sim.phi + 0.27 * set.length) : 0.13 * slot), fig: new Human(color, skin ?? slot % 4), lane: new THREE.Group(), laneTarget: new THREE.Vector3(),
   };
   if (ref) p.sim.t = ref.sim.t;
   p.lane.add(p.fig.root);
   stage.scene.add(p.lane);
-  people.push(p);
+  set.push(p);
+  return p;
+}
+function addPerson(scId, extra = {}) {
+  if (simPeople.length >= MAX) return null;
+  const used = new Set(simPeople.map((p) => p.slot));
+  let slot = 0;
+  while (used.has(slot)) slot++;
+  const sc = scen(scId);
+  const p = makePerson(simPeople, { slot, color: PALETTE[slot], name: extra.name || sc.name, scId: sc.id, cfg: extra.cfg || { ...sc.cfg } });
+  if (extra.cfg) p.scen = null;
+  if (extra.open) p.open = true;
+  p.lane.visible = S.mode === "sim";
   if (S.focus === null) S.focus = p.uid;
   if (S.selUid === null) S.selUid = p.uid;
   recompute(p);
   return p;
 }
+function disposePerson(p) { p.fig.dispose(); p.lane.removeFromParent(); stage.removeArrows(p.uid); }
 function removePerson(uid) {
-  const p = byUid(uid);
-  if (!p || people.length <= 1) return;
-  p.fig.dispose(); p.lane.removeFromParent(); stage.removeArrows(uid);
-  people = people.filter((x) => x !== p);
-  if (S.focus === uid) S.focus = people[0].uid;
-  if (S.selUid === uid) S.selUid = people[0].uid;
+  const p = simPeople.find((x) => x.uid === uid);
+  if (!p || simPeople.length <= 1) return;
+  disposePerson(p);
+  const i = simPeople.indexOf(p); simPeople.splice(i, 1);
+  if (S.focus === uid) S.focus = simPeople[0].uid;
+  if (S.selUid === uid) S.selUid = simPeople[0].uid;
   layout(); renderPeople(); renderStatic();
 }
 function recompute(p) {
@@ -67,16 +79,17 @@ function recompute(p) {
   if (p.m.amp) for (const sd of ["L", "R"]) rowFor(p, sd)[0].split("+").forEach((c) => codes.add(c));
   p.fig.setIMUs(codes);
   stage.applyEnvIntensity();
+  if (!people.every((x) => x.m)) return;
   layout();
   updateCardOutputs(p);
-  renderStatic();
+  if (S.mode === "sim") renderStatic();
 }
 function resetEvents(p) { const { phi, t } = p.sim; p.sim = newSim(phi); p.sim.t = t; }
 
 function layout() {
-  const lab = S.env === "lab", n = people.length;
+  const lab = S.env === "lab", n = people.length, rwm = S.mode === "rw";
   if (lab) {
-    const merged = S.view === "ghost" && n > 1;
+    const merged = (rwm || S.view === "ghost") && n > 1;
     people.forEach((p, i) => {
       p.laneTarget.set(merged ? 0 : (i - (n - 1) / 2) * 1.5, 0, merged ? 0 : -(i - (n - 1) / 2) * 1.15);
       p.fig.root.visible = true;
@@ -85,22 +98,22 @@ function layout() {
     });
     S.merged = merged;
   } else {
-    const f = byUid(S.focus) || people[0];
+    const f = (rwm ? people[0] : byUid(S.focus)) || people[0];
     people.forEach((p) => {
       p.laneTarget.set(0, 0, 0);
       const isF = p === f;
-      p.fig.root.visible = isF || S.ghostOthers;
+      p.fig.root.visible = isF || S.ghostOthers || rwm;
       if (p.fig.ghost !== !isF) p.fig.setGhost(!isF);
       if (!isF) p.sim.lock = null;
     });
     S.merged = true;
   }
-  stage.pickables = people.filter((p) => p.fig.root.visible && !p.fig.ghost && p.fig.pickables).flatMap((p) => p.fig.pickables);
-  $("viewSeg").hidden = !lab; $("focusSeg").hidden = lab; $("ghostTog").hidden = lab;
+  stage.pickables = rwm ? [] : people.filter((p) => p.fig.root.visible && !p.fig.ghost && p.fig.pickables).flatMap((p) => p.fig.pickables);
+  $("viewSeg").hidden = !lab; $("focusSeg").hidden = lab || people.length < 2; $("ghostTog").hidden = lab || people.length < 2;
   $("windLbl").classList.toggle("off", !(stage.env && stage.env.windy));
   $("focusSeg").innerHTML = people.map((p) => `<button data-v="${p.uid}" class="${p.uid === S.focus ? "on" : ""}" style="${p.uid === S.focus ? `background:${p.color};color:#02101c` : ""}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px"></span>${esc(p.name.slice(0, 14))}</button>`).join("");
 }
-const camScale = () => (S.env === "lab" ? 1 + 0.2 * Math.max(0, people.length - 2) : 1);
+const camScale = () => (S.env === "lab" && !S.merged ? 1 + 0.2 * Math.max(0, people.length - 2) : 1);
 
 // ---------------------------------------------------------------- people cards
 const bmiCat = (b) => (b < 18.5 ? "น้ำหนักน้อย" : b < 25 ? "ปกติ" : b < 30 ? "น้ำหนักเกิน" : "อ้วน");
@@ -108,37 +121,41 @@ function cardHTML(p) {
   const c = p.cfg, amp = c.mode !== "normal", sc = scen(p.scen);
   const opt = (rows, sel) => rows.map((r, k) => `<option value="${k}" ${k === sel ? "selected" : ""}>${r[8]} · ${r[0]} — MAE IC ${(r[3] * 1000).toFixed(0)} / FC ${(r[6] * 1000).toFixed(0)} ms${r[7] ? " · F1 " + r[7].toFixed(2) : ""}</option>`).join("");
   const seg = (key, items) => `<div class="seg" data-key="${key}">${items.map(([v, l]) => `<button data-v="${v}" class="${String(c[key]) === String(v) ? "on" : ""}">${l}</button>`).join("")}</div>`;
-  return `<div class="pc" data-uid="${p.uid}" style="--pc:${p.color}">
+  const meas = !!c.meas;
+  return `<div class="pc ${p.open ? "open" : ""}" data-uid="${p.uid}" style="--pc:${p.color}">
     <div class="pc-h"><span class="sw"></span><input data-name value="${esc(p.name)}" aria-label="ชื่อ" maxlength="28">
+      <button class="ib" data-act="open" title="ปรับค่า" aria-expanded="${!!p.open}">${p.open ? "ปิด ▴" : "ปรับ ▾"}</button>
       <button class="ib ${p.show ? "" : "off"}" data-act="show" title="แสดง/ซ่อนในกราฟ">${p.show ? "◉" : "○"}</button>
-      <button class="ib" data-act="remove" title="ลบคนนี้" ${people.length <= 1 ? "disabled" : ""}>×</button></div>
-    <div class="bmi">BMI<b data-o="bmi"></b><span data-o="cat"></span> · <span data-o="v"></span></div>
-    <select class="scen" data-sel="scen">${SCENARIOS.map((s) => `<option value="${s.id}" ${s.id === p.scen ? "selected" : ""}>${s.tag} · ${s.name}</option>`).join("")}<option value="" ${p.scen ? "" : "selected"}>กำหนดเอง</option></select>
-    <div class="desc">${sc ? sc.desc : "ปรับค่าเองจากแถบด้านล่าง"}</div>
+      <button class="ib" data-act="remove" title="ลบคนนี้" ${simPeople.length <= 1 ? "disabled" : ""}>×</button></div>
+    <div class="sum"><span>BMI <b data-o="bmi"></b> <span data-o="cat"></span></span><span data-o="v"></span>${meas ? '<span class="tag-rw">จากวิดีโอจริง</span>' : ""}</div>
+    <select class="scen" data-sel="scen">${meas ? '<option value="" selected>ท่าเดินจากวิดีโอ (Real World)</option>' : ""}${SCENARIOS.map((s) => `<option value="${s.id}" ${s.id === p.scen ? "selected" : ""}>${s.tag} · ${s.name}</option>`).join("")}${meas ? "" : `<option value="" ${p.scen ? "" : "selected"}>กำหนดเอง</option>`}</select>
+    <div class="desc">${meas ? "มุมข้อต่อและจังหวะก้าวจากคลิปจริง ที่วิเคราะห์ในโหมด Real World" : sc ? sc.desc : "ปรับค่าเองจากแถบด้านล่าง"}</div>
+    <div class="pc-body">
     <div class="frm">
-      <div class="fld full"><div class="lab">รูปแบบการเดิน</div>${seg("mode", [["normal", "ปกติ"], ["ampL", "ขาเทียมซ้าย"], ["ampR", "ขาเทียมขวา"]])}</div>
-      <div class="fld full"><div class="lab">ความเร็ว</div>${seg("speed", [["slow", "ช้า"], ["comf", "สบาย"], ["self", "เลือกเอง"], ["fast", "เร็ว"]])}</div>
+      ${meas ? "" : `<div class="fld full"><div class="lab">รูปแบบการเดิน</div>${seg("mode", [["normal", "ปกติ"], ["ampL", "ขาเทียมซ้าย"], ["ampR", "ขาเทียมขวา"]])}</div>
+      <div class="fld full"><div class="lab">ความเร็ว</div>${seg("speed", [["slow", "ช้า"], ["comf", "สบาย"], ["self", "เลือกเอง"], ["fast", "เร็ว"]])}</div>`}
       <div class="fld"><div class="lab">อายุ<output data-o="age"></output></div><input type="range" data-k="age" min="18" max="85" step="1" value="${c.age}"></div>
       <div class="fld"><div class="lab">เพศ</div>${seg("sex", [["M", "ชาย"], ["F", "หญิง"]])}</div>
       <div class="fld"><div class="lab">ส่วนสูง<output data-o="ht"></output></div><input type="range" data-k="ht" min="140" max="200" step="0.5" value="${c.ht}"></div>
       <div class="fld"><div class="lab">น้ำหนัก<output data-o="wt"></output></div><input type="range" data-k="wt" min="35" max="150" step="0.5" value="${c.wt}"></div>
     </div>
-    <details><summary>ขั้นสูง · ผู้เข้าร่วม S01–S12 · ชุด IMU</summary>
+    ${meas ? "" : `<details><summary>ขั้นสูง · ผู้เข้าร่วม S01–S12 · ชุด IMU</summary>
       <div class="fld full"><div class="lab">ผู้เข้าร่วมงานวิจัย (Table 1–2)</div>
         <select data-sel="subject" ${amp ? "" : "disabled"}><option value="">ค่าเฉลี่ยกลุ่ม (n = 12)</option>${SUBJECTS.map((s) => `<option value="${s.id}" ${c.subject === s.id ? "selected" : ""}>${s.id} · ${s.age} ปี · ${s.wt} kg · ${s.ht} cm · ขาเทียม${s.side === "L" ? "ซ้าย" : "ขวา"}</option>`).join("")}</select></div>
       <div class="fld full"><div class="lab">IMU ฝั่งขาเทียม (AMP)</div><select data-sel="imuAmp" ${amp ? "" : "disabled"}>${opt(T6.AMP, p.imuAmp)}</select></div>
       <div class="fld full"><div class="lab">IMU ฝั่งขาดี (SOU)</div><select data-sel="imuSou" ${amp ? "" : "disabled"}>${opt(T6.SOU, p.imuSou)}</select></div>
-    </details>
+    </details>`}
+    </div>
     <div class="warnline" data-o="warn"></div>
   </div>`;
 }
 function renderPeople() {
-  const full = people.length >= MAX;
-  $("people").innerHTML = people.map(cardHTML).join("") +
-    `<div class="pc addp ${full ? "full" : ""}"><button class="big" data-add="healthy">+ เพิ่มคน</button>
+  const full = simPeople.length >= MAX;
+  $("people").innerHTML = simPeople.map(cardHTML).join("") +
+    `<div class="addp ${full ? "full" : ""}"><button class="btn" data-add="healthy">+ เพิ่มคน</button>
       <div class="quick">${SCENARIOS.map((s) => `<button data-add="${s.id}">${s.name}</button>`).join("")}</div>
-      <div class="muted">${full ? "ครบ 6 คนแล้ว" : `อีก ${MAX - people.length} คน`}</div></div>`;
-  people.forEach(updateCardOutputs);
+      <div class="muted">${full ? "ครบ 6 คนแล้ว" : `เพิ่มได้อีก ${MAX - simPeople.length} คน`}</div></div>`;
+  simPeople.forEach(updateCardOutputs);
   renderLegend();
 }
 function updateCardOutputs(p) {
@@ -147,9 +164,9 @@ function updateCardOutputs(p) {
   const set = (k, v) => { const o = el.querySelector(`[data-o="${k}"]`); if (o) o.textContent = v; };
   set("bmi", m.bmi.toFixed(1)); set("cat", bmiCat(m.bmi));
   set("age", c.age + " ปี"); set("ht", c.ht.toFixed(1) + " cm"); set("wt", c.wt.toFixed(1) + " kg");
-  set("v", m.v.toFixed(2) + " m/s" + (m.amp ? (m.subj ? " · " + m.subj.id : " · Table 2") : ""));
+  set("v", m.v.toFixed(2) + " m/s · " + m.cadence.toFixed(0) + " ก้าว/นาที" + (m.amp ? (m.subj ? " · " + m.subj.id : " · Table 2") : ""));
   const w = el.querySelector('[data-o="warn"]'), msgs = [];
-  if (m.bmi < 18.5 || m.bmi >= 25) msgs.push("BMI อยู่นอกช่วงที่งานวิจัยรามาฯ ศึกษา (ช่วงปกติ) ค่า varus และ IR จึงได้จากการยืดเส้นตรงออกไป");
+  if ((m.bmi < 18.5 || m.bmi >= 25) && p.open) msgs.push("BMI อยู่นอกช่วงที่งานวิจัยรามาฯ ศึกษา (ช่วงปกติ) ค่า varus และ IR จึงได้จากการยืดเส้นตรงออกไป");
   if (m.amp && !m.subj && (Math.abs(c.age - 51) > 15 || m.bmi > 26)) msgs.push("อยู่นอกลักษณะของกลุ่มตัวอย่างขาเทียม (ชาย อายุ 51 ± 10 ปี BMI ประมาณ 23)");
   w.textContent = msgs.join(" · "); w.classList.toggle("show", msgs.length > 0);
 }
@@ -157,11 +174,12 @@ const pending = new Set();
 const cardOf = (e) => { const el = e.target.closest(".pc[data-uid]"); return el ? byUid(+el.dataset.uid) : null; };
 $("people").addEventListener("click", (e) => {
   const add = e.target.closest("[data-add]");
-  if (add) { const p = addPerson(add.dataset.add); if (p) { renderPeople(); layout(); if (S.env === "lab") stage.view(S.cam, camScale()); } return; }
+  if (add) { const p = addPerson(add.dataset.add); if (p) { renderPeople(); layout(); renderTabs(); if (S.env === "lab") stage.view(S.cam, camScale()); } return; }
   const p = cardOf(e); if (!p) return;
   const act = e.target.closest("[data-act]");
   if (act) {
-    if (act.dataset.act === "remove") { removePerson(p.uid); if (S.env === "lab") stage.view(S.cam, camScale()); }
+    if (act.dataset.act === "remove") { removePerson(p.uid); renderTabs(); if (S.env === "lab") stage.view(S.cam, camScale()); }
+    else if (act.dataset.act === "open") { p.open = !p.open; const el = document.querySelector(`.pc[data-uid="${p.uid}"]`); if (el) { el.outerHTML = cardHTML(p); updateCardOutputs(p); } }
     else { p.show = !p.show; renderPeople(); }
     return;
   }
@@ -202,7 +220,7 @@ $("people").addEventListener("change", (e) => {
 $("people").addEventListener("keydown", (e) => { if (e.target.hasAttribute("data-name")) { const p = cardOf(e); if (p) p.nameEdited = true; } });
 
 function renderLegend() {
-  $("legend").innerHTML = people.map((p) => `<button class="chip ${p.show ? "" : "off"}" data-uid="${p.uid}"><i style="background:${p.color}"></i>${esc(p.name)}</button>`).join("");
+  $("legend").innerHTML = simPeople.map((p) => `<button class="chip ${p.show ? "" : "off"}" data-uid="${p.uid}"><i style="background:${p.color}"></i>${esc(p.name)}</button>`).join("");
 }
 $("legend").addEventListener("click", (e) => { const b = e.target.closest("[data-uid]"); if (!b) return; const p = byUid(+b.dataset.uid); p.show = !p.show; renderPeople(); });
 
@@ -231,15 +249,86 @@ function setEnv(id) {
 $("envSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.dataset.v !== S.env) setEnv(b.dataset.v); });
 segGroup("viewSeg", (v) => { S.view = v; layout(); });
 segGroup("focusSeg", (v) => { S.focus = +v; people.forEach((p) => (p.sim.lock = null)); layout(); });
-segGroup("camSeg", (v) => { S.cam = v; stage.view(v, camScale()); });
+segGroup("camSeg", (v) => { S.cam = v; $("camName").textContent = CAM_NAMES[v]; stage.view(v, camScale()); closePops(); });
 segGroup("legSeg", (v) => { S.leg = v; });
 segGroup("unitSeg", (v) => { S.unit = v; });
 segGroup("emgSideSeg", (v) => { S.emgSide = v; renderMuscleInfo(); });
 const toggle = (id, key, after) => $(id).addEventListener("click", () => { S[key] = !S[key]; $(id).classList.toggle("on", S[key]); after && after(); });
 toggle("ghostTog", "ghostOthers", () => layout());
-toggle("orbitTog", "orbit", () => { stage.controls.autoRotate = S.orbit; });
 toggle("emgTog", "emg", () => updateHint());
-toggle("grfTog", "grf");
+$("orbitTog").addEventListener("change", (e) => { S.orbit = e.target.checked; stage.controls.autoRotate = S.orbit; });
+$("grfTog").addEventListener("change", (e) => { S.grf = e.target.checked; });
+// popover menus (camera, more settings)
+const POPS = [["camBtn", "camPop"], ["moreBtn", "morePop"]];
+function closePops(except) { for (const [b, p] of POPS) if (p !== except) { $(p).hidden = true; $(b).setAttribute("aria-expanded", "false"); } }
+for (const [b, p] of POPS) $(b).addEventListener("click", (e) => { e.stopPropagation(); const open = $(p).hidden; closePops(p); $(p).hidden = !open; $(b).setAttribute("aria-expanded", String(open)); });
+document.addEventListener("click", (e) => { if (!e.target.closest(".pop")) closePops(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") closePops(); });
+
+// ---------------------------------------------------------------- modes + tabs
+const TABS = {
+  sim: [["people", "ผู้เดิน"], ["cmp", "กราฟเทียบ"], ["emg", "กล้ามเนื้อ EMG"], ["metrics", "ตัวชี้วัด"], ["about", "ข้อมูลอ้างอิง"]],
+  rw: [["rw-sum", "ผลวิเคราะห์"], ["rw-charts", "กราฟมุมข้อต่อ"], ["rw-table", "ค่าที่วัดได้"]],
+};
+function renderTabs() {
+  $("tabs").innerHTML = TABS[S.mode].map(([id, l]) => `<button data-tab="${id}" class="${S.tab[S.mode] === id ? "on" : ""}">${l}${id === "people" ? ` <span class="muted">${simPeople.length}</span>` : ""}${id === "rw-sum" && rw && rw.result && rw.result.ok ? `<span class="dot" style="background:var(--${{ good: "ok", fair: "warn", poor: "bad" }[rw.result.verdict.k]})"></span>` : ""}</button>`).join("");
+}
+function setTab(id) {
+  S.tab[S.mode] = id;
+  document.querySelectorAll("#deck .tab").forEach((sec) => { sec.hidden = !(sec.dataset.tab === id && sec.dataset.mode === S.mode); });
+  $("tabs").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.tab === id));
+  if (id === "cmp") renderCharts();
+  if (id === "metrics") { renderMetrics(); renderEvents(); renderContact(); }
+  if (id === "emg") { renderMuscleInfo(); renderEMG(); }
+  if (id === "rw-charts" && rw) { rw.drawCharts(); rw.drawTimeline(); }
+}
+$("tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); });
+document.querySelector(".mh-go").addEventListener("click", () => { setTab("emg"); $("tabs").scrollIntoView({ behavior: "smooth" }); });
+const hideArrows = (p) => { const a = stage.arrows.get(p.uid); if (a) a.R.visible = a.L.visible = false; };
+function setMode(m) {
+  if (m === S.mode) return;
+  S.mode = m;
+  $("hero").dataset.mode = m;
+  $("rwp").hidden = m !== "rw";
+  $("modeSeg").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === m));
+  for (const p of simPeople) { p.lane.visible = m === "sim"; if (m !== "sim") hideArrows(p); }
+  for (const p of rwPeople) { p.lane.visible = m === "rw"; if (m !== "rw") hideArrows(p); }
+  people = m === "rw" ? rwPeople : simPeople;
+  if (m === "rw" && !rwPeople.length) buildRw(null);
+  S.selected = false; if (S.emg && m === "rw") { S.emg = false; $("emgTog").classList.remove("on"); }
+  renderMuscleInfo(); updateHint(); renderRwLegend();
+  people.forEach((p) => (p.sim.lock = null));
+  layout(); renderTabs(); setTab(S.tab[m]);
+  if (m === "sim") renderStatic();
+  requestAnimationFrame(() => { stage.resize(); stage.view(m === "rw" ? "side" : S.cam, camScale()); });
+}
+$("modeSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) setMode(b.dataset.v); });
+
+// ---------------------------------------------------------------- real world: 3D replay people
+const RW_FRIEND = "#00a888", RW_NORM = "#d7e3f4";
+function rwBase(o) { return { age: o.age, sex: o.sex, ht: o.ht, wt: o.wt, mode: "normal", speed: "comf" }; }
+function buildRw(R, o) {
+  for (const p of rwPeople) disposePerson(p);
+  rwPeople.length = 0;
+  const form = o || { ht: +$("rwHt").value || 168, wt: +$("rwWt").value || 62, age: +$("rwAge").value || 25, sex: $("rwSex").value };
+  const base = rwBase(form), v = R && R.ok && R.st.speed === R.st.speed ? R.st.speed : undefined;
+  if (R && R.ok) {
+    const meas = toMeas(R);
+    makePerson(rwPeople, { slot: 2, color: RW_FRIEND, name: "เพื่อนคุณ (จากวิดีโอ)", cfg: meas ? { ...base, meas } : { ...base, v }, skin: 1 });
+  }
+  makePerson(rwPeople, { slot: 0, color: RW_NORM, name: "ค่าปกติ", cfg: { ...base, v }, skin: 1 });
+  for (const p of rwPeople) { p.lane.visible = S.mode === "rw"; p.m = null; }
+  if (S.mode === "rw") people = rwPeople;
+  for (const p of rwPeople) recompute(p);
+  renderRwLegend(); renderTabs();
+}
+function renderRwLegend() {
+  const el = $("rwLegend"), has = rwPeople.length > 1;
+  el.hidden = S.mode !== "rw";
+  el.innerHTML = has
+    ? `<span><i style="background:${RW_FRIEND}"></i>ท่าเดินจากวิดีโอ</span><span><i class="ghost"></i>ค่าปกติ (โปร่งใส)</span>`
+    : `<span><i style="background:${RW_NORM}"></i>การเดินปกติของคนรูปร่างนี้ · รอผลวิเคราะห์</span>`;
+}
 $("anim").addEventListener("input", (e) => { S.anim = +e.target.value; $("animOut").textContent = S.anim.toFixed(2) + "×"; });
 $("exag").addEventListener("input", (e) => { S.exag = +e.target.value; $("exagOut").textContent = S.exag + "×"; });
 $("wind").addEventListener("input", (e) => { S.wind = +e.target.value; $("windOut").textContent = S.wind.toFixed(1); });
@@ -253,11 +342,11 @@ window.addEventListener("keydown", (e) => {
 });
 $("roster").addEventListener("click", (e) => {
   const r = e.target.closest("[data-uid]"); if (!r) return;
-  if (S.env !== "lab") { S.focus = +r.dataset.uid; people.forEach((p) => (p.sim.lock = null)); layout(); }
+  if (S.env !== "lab" && S.mode === "sim") { S.focus = +r.dataset.uid; people.forEach((p) => (p.sim.lock = null)); layout(); }
 });
 const COEF_FIELDS = [["var", "Varus ตอน IC ต่อ BMI +1 (°)", 0.01], ["ir", "Internal rotation ต่อ BMI +1 (°)", 0.05], ["ref", "BMI อ้างอิง (kg/m²)", 0.1], ["varAge", "Varus ต่ออายุ +1 ปี (°)", 0.01], ["varSex", "Varus ส่วนต่างเพศหญิง (°)", 0.1], ["irAge", "IR ต่ออายุ +1 ปี (°)", 0.01], ["irSex", "IR ส่วนต่างเพศหญิง (°)", 0.1]];
 $("coef").innerHTML = COEF_FIELDS.map(([k, l, s]) => `<span>${l}</span><input type="number" step="${s}" data-c="${k}" value="${coef[k]}">`).join("");
-$("coef").addEventListener("input", (e) => { const k = e.target.dataset.c; if (!k) return; const v = parseFloat(e.target.value); coef[k] = isNaN(v) ? COEF_DEFAULT[k] : v; people.forEach(recompute); });
+$("coef").addEventListener("input", (e) => { const k = e.target.dataset.c; if (!k) return; const v = parseFloat(e.target.value); coef[k] = isNaN(v) ? COEF_DEFAULT[k] : v; simPeople.forEach(recompute); });
 
 // ---------------------------------------------------------------- muscles / EMG
 function buildMuscleList() {
@@ -291,7 +380,8 @@ function renderMuscleInfo() {
   $("mhN").textContent = mu.en; $("mhTh").textContent = mu.th; $("mhFn").textContent = mu.fn;
 }
 $("mhX").addEventListener("click", () => { S.selected = false; renderMuscleInfo(); updateHint(); });
-function updateHint() { $("hint").classList.toggle("off", S.selected); $("hint").textContent = S.emg ? "คลิกที่กล้ามเนื้อบนตัวคนเพื่อดูคลื่น EMG · ลากเพื่อหมุนกล้อง" : "คลิกที่ขา สะโพก หรือหลังของคนเพื่อดูกล้ามเนื้อและคลื่น EMG · ลากเพื่อหมุนกล้อง"; }
+let hintUntil = 0;
+function updateHint() { $("hint").classList.toggle("off", S.selected || performance.now() > hintUntil); $("hint").textContent = S.emg ? "คลิกที่กล้ามเนื้อบนตัวคนเพื่อดูคลื่น EMG · ลากเพื่อหมุนกล้อง" : "คลิกที่ขา สะโพก หรือหลังของคนเพื่อดูกล้ามเนื้อ · ลากเพื่อหมุนกล้อง"; }
 const pickInfo = (hit) => (hit && hit.object.userData.figure ? hit.object.userData.figure.pickInfo(hit) : null);
 const onPick = (hit) => {
   const ud = pickInfo(hit);
@@ -327,7 +417,7 @@ const scopeTrace = (p, win, sd, id) => {
 function renderEMG() {
   const sd = S.emgSide, id = S.muscle, ps = shown();
   if (!ps.length) return;
-  const ph = (p) => frac(p.sim.phi + (sd === "L" ? 0.5 : 0)) * 100;
+  const ph = (p) => frac(p.sim.phi + (sd === "L" ? p.m.offL : 0)) * 100;
   let mx = 0.25;
   for (const p of ps) for (const v of p.emg.curves[sd][id]) mx = Math.max(mx, v);
   drawCompare($("envChart"), {
@@ -370,7 +460,7 @@ function renderCharts() {
       const data = chartData(p, sd, key);
       series.push({ data, color: p.color, dash: S.leg === "B" && sd === "R" ? [5, 4] : null, width: 2, label: `${p.name.slice(0, 10)}${S.leg === "B" ? " " + sd : ""}` });
       toeOff.push({ x: p.m.legs[sd].sf * 100, color: p.color });
-      const ph = frac(p.sim.phi + (sd === "L" ? 0.5 : 0)) * 100;
+      const ph = frac(p.sim.phi + (sd === "L" ? p.m.offL : 0)) * 100;
       cursors.push({ x: ph, y: data[Math.round(ph)], color: p.color });
     }
     const unit = key === "grf" ? (S.unit === "BW" ? "×BW" : " N") : u, dp = key === "grf" ? (S.unit === "N" ? 0 : 2) : 1;
@@ -412,7 +502,7 @@ function errs(p, sd, k) {
   }
   return st[k];
 }
-const legPhase = (p, sd) => { const x = p.sim.phi + (sd === "L" ? 0.5 : 0); return { k: Math.floor(x), p: frac(x) }; };
+const legPhase = (p, sd) => { const x = p.sim.phi + (sd === "L" ? p.m.offL : 0); return { k: Math.floor(x), p: frac(x) }; };
 function predContact(p, sd) {
   const { k, p: ph } = legPhase(p, sd), L = p.m.legs[sd], P = p.m.T, tau = ph * P, e = errs(p, sd, k), en = errs(p, sd, k + 1);
   return (tau >= e.ic && tau < L.sf * P + e.fc) || tau >= P + en.ic ? 1 : 0;
@@ -459,18 +549,18 @@ function renderContact() {
   if (c.style.height !== want) c.style.height = want;
   if (lanes.length) drawContact(c, lanes, people[0].sim.t);
 }
-function renderStatic() { renderMetrics(); renderEvents(); renderMuscleInfo(); }
+function renderStatic() { if (S.mode !== "sim") return; renderMetrics(); renderEvents(); renderMuscleInfo(); }
 
 // ---------------------------------------------------------------- roster (HUD)
 function renderRoster() {
   const el = $("roster");
   el.innerHTML = people.map((p) => {
-    const m = p.m, leg = (sd) => { const ph = frac(p.sim.phi + (sd === "L" ? 0.5 : 0)), st = ph < m.legs[sd].sf; return `<span>${legLabel(p, sd)}</span><div class="bar ${st ? "st" : ""}"><i style="width:${(ph * 100).toFixed(0)}%"></i><u style="left:${(m.legs[sd].sf * 100).toFixed(0)}%"></u></div>`; };
+    const m = p.m, leg = (sd) => { const ph = frac(p.sim.phi + (sd === "L" ? p.m.offL : 0)), st = ph < m.legs[sd].sf; return `<span>${legLabel(p, sd)}</span><div class="bar ${st ? "st" : ""}"><i style="width:${(ph * 100).toFixed(0)}%"></i><u style="left:${(m.legs[sd].sf * 100).toFixed(0)}%"></u></div>`; };
     let top = null;
     if (p.acts) for (const sd of ["L", "R"]) for (const [id, a] of Object.entries(p.acts[sd])) if (!top || a > top[0]) top = [a, `${MUSCLE[id].abbr}·${sd}`];
     const vis = p.fig.root.visible && !p.fig.ghost;
     return `<div class="rp ${vis || S.env === "lab" ? "" : "dim"}" data-uid="${p.uid}"><span class="dot" style="background:${p.color}"></span><span class="nm">${esc(p.name)}</span><span class="st"><b>${m.v.toFixed(2)}</b> m/s · <b>${m.cadence.toFixed(0)}</b> spm</span>
-      <div class="legs">${leg("L")}${leg("R")}</div>${top && people.length <= 3 ? `<div class="emg">EMG ▸ ${top[1]} <b>${Math.round(top[0] * 100)}%</b> · ${phaseName(m.legs.L, frac(p.sim.phi + 0.5))}</div>` : ""}</div>`;
+      <div class="legs">${leg("L")}${leg("R")}</div></div>`;
   }).join("");
 }
 
@@ -501,10 +591,10 @@ function animateFigure(p, dt, i) {
   if (dt > 0) { const n = 4; for (let k = 0; k < n; k++) step(p, dt / n); }
   const arrows = stage.arrowsFor(p.uid, p.color);
   if (!fig.root.visible || !env) { arrows.R.visible = arrows.L.visible = false; return; }
-  const pR = frac(sim.phi), pL = frac(sim.phi + 0.5), ph = { R: pR, L: pL };
+  const pR = frac(sim.phi), pL = frac(sim.phi + m.offL), ph = { R: pR, L: pL };
   fig.pose(m, pR, pL, S.exag);
-  const lab = env.treadmill, focus = !lab && p.uid === S.focus;
-  const fp = byUid(S.focus) || people[0];
+  const lab = env.treadmill, focus = !lab && (S.mode === "rw" ? p === people[0] : p.uid === S.focus);
+  const fp = (S.mode === "rw" ? people[0] : byUid(S.focus)) || people[0];
   const sink = lab ? 0 : env.sink(fp.m);
   fig.ground(GROUND - sink);
   if (lab || focus) {
@@ -539,21 +629,29 @@ function animateFigure(p, dt, i) {
   }
 }
 
-const vis = { hero: true, cmp: false, emg: false, tcn: false };
+const vis = { hero: true, cmp: false, emg: false, tcn: false, deck: false };
 const io = new IntersectionObserver((ents) => { for (const e of ents) vis[e.target.dataset.vis] = e.isIntersecting; }, { rootMargin: "100px" });
-[["hero", "hero"], ["cmpSec", "cmp"], ["emgSec", "emg"], ["tcnSec", "tcn"]].forEach(([id, k]) => { $(id).dataset.vis = k; io.observe($(id)); });
+[["hero", "hero"], ["cmpSec", "cmp"], ["emgSec", "emg"], ["tcnSec", "tcn"], ["deck", "deck"]].forEach(([id, k]) => { $(id).dataset.vis = k; io.observe($(id)); });
 
-let last = performance.now(), frameN = 0, envT = 0;
+let last = performance.now(), frameN = 0, envT = 0, rwBusy = false;
 function tick(dt, sdt) {
   envT += sdt;
   stage.U.uWind.value = S.wind * (0.8 + 0.25 * Math.sin(envT * 0.37) + 0.35 * Math.max(0, Math.sin(envT * 1.3) * Math.sin(envT * 0.21)));
+  if (S.mode === "rw" && rwPeople.length && rwPeople.every((p) => p.m)) {
+    // the replay follows the video's own gait phase while it plays; the normal reference is phase-locked
+    const lead = rwPeople[0], ph = rw && rw.playing ? rw.phaseAt(rw.time) : null;
+    let target = ph !== null ? ph : lead.sim.phi + sdt / lead.m.T;
+    if (ph !== null && Math.abs(target - lead.sim.phi) > 3) lead.sim.lock = null;
+    for (const p of rwPeople) { p.sim.phi = target - sdt / p.m.T; }
+  }
   people.forEach((p, i) => { p.lane.position.lerp(p.laneTarget, Math.min(1, Math.max(dt, sdt) * 5)); animateFigure(p, sdt, i); });
   const sel = S.selected ? { group: S.muscle, side: S.emgSide } : null;
   for (const p of people) {
-    p.acts = { L: actNow(p.m, p.emg.prof, "L", frac(p.sim.phi + 0.5)), R: actNow(p.m, p.emg.prof, "R", frac(p.sim.phi)) };
+    p.acts = { L: actNow(p.m, p.emg.prof, "L", frac(p.sim.phi + p.m.offL)), R: actNow(p.m, p.emg.prof, "R", frac(p.sim.phi)) };
     p.fig.applyEMG(p.acts, S.emg, sel, envT);
   }
-  stage.update(dt, envT, { lanes: people.map((p) => p.lane), colors: people.map((p) => p.color), figVisible: people.map((p) => p.fig.root.visible), merged: S.merged ? 1 : 0, focusFig: S.env !== "lab" ? (byUid(S.focus) || people[0]).fig : null, envDt: sdt });
+  const focusP = S.mode === "rw" ? people[0] : byUid(S.focus) || people[0];
+  stage.update(dt, envT, { lanes: people.map((p) => p.lane), colors: people.map((p) => p.color), figVisible: people.map((p) => p.fig.root.visible), merged: S.merged ? 1 : 0, focusFig: S.env !== "lab" && focusP ? focusP.fig : null, envDt: sdt });
 }
 const perf = { n: 0, acc: 0, level: 0 };
 function frame(now) {
@@ -568,19 +666,24 @@ function frame(now) {
   }
   for (const p of pending) recompute(p);
   pending.clear();
+  const sim = S.mode === "sim";
   tick(dt, S.playing ? dt * S.anim : 0);
-  if (vis.hero) stage.render();
+  if (!sim && rw) rw.tick(dt);
+  // while the pose model is busy, the 3D view yields most of the GPU to it
+  if (vis.hero && (!rwBusy || frameN % 8 === 0)) stage.render();
   updateCallout();
   frameN++;
   if (frameN % 2 === 0) {
-    if (vis.cmp) renderCharts();
-    if (vis.tcn) renderContact();
-    if (vis.emg) renderEMG();
-    if (S.selected && !$("mhud").hidden) { const p = byUid(S.selUid) || people[0]; drawScope($("mhScope"), [scopeTrace(p, 2, S.emgSide, S.muscle)], { win: 2, now: p.sim.t, scale: 1.6, compact: true }); }
+    if (sim) {
+      if (vis.cmp) renderCharts();
+      if (vis.tcn) renderContact();
+      if (vis.emg) renderEMG();
+      if (S.selected && !$("mhud").hidden) { const p = byUid(S.selUid) || people[0]; drawScope($("mhScope"), [scopeTrace(p, 2, S.emgSide, S.muscle)], { win: 2, now: p.sim.t, scale: 1.6, compact: true }); }
+    } else if (vis.deck && S.tab.rw === "rw-charts" && rw) { rw.drawCharts(); rw.drawTimeline(); }
   }
-  if (frameN % 4 === 0) updateMuscleLive();
-  if (frameN % 6 === 0) renderRoster();
-  if (frameN % 30 === 0) renderEvents();
+  if (sim && frameN % 4 === 0) updateMuscleLive();
+  if (sim && frameN % 6 === 0) renderRoster();
+  if (sim && frameN % 30 === 0) renderEvents();
   requestAnimationFrame(frame);
 }
 
@@ -618,7 +721,22 @@ async function boot() {
     await nextFrame();
     addPerson(defaults[i]);
   }
-  renderPeople(); layout(); renderStatic(); renderCharts(); updateHint(); renderRoster();
+  rw = initRW({
+    onResult: (R, o) => { buildRw(R, o); layout(); stage.view("side", camScale()); },
+    onClear: () => { if (rwPeople.length > 1) buildRw(null); },
+    onBusy: (b) => { rwBusy = b; },
+    onToSim: (R, o) => {
+      const meas = toMeas(R);
+      if (simPeople.length >= MAX) { removePerson(simPeople[simPeople.length - 1].uid); }
+      const p = addPerson("healthy", { name: "จากวิดีโอ", cfg: meas ? { ...rwBase(o), meas } : { ...rwBase(o), v: R.st.speed }, open: true });
+      setMode("sim"); renderPeople(); layout(); setTab("people");
+      if (p) { S.focus = p.uid; layout(); }
+      $("tabs").scrollIntoView({ behavior: "smooth" });
+    },
+  });
+  renderPeople(); layout(); renderStatic(); renderCharts(); renderRoster();
+  renderTabs(); setTab("people");
+  hintUntil = performance.now() + 9000; updateHint(); setTimeout(updateHint, 9100);
   stage.view("cine", camScale());
   bootMsg("เตรียม shader…", 86);
   await nextFrame();
@@ -632,7 +750,7 @@ async function boot() {
 }
 boot().catch(bootError);
 window.__gait = {
-  people: () => people, get stage() { return stage; }, S, setEnv, selectMuscle, addPerson: (id) => { const p = addPerson(id); renderPeople(); layout(); return p; },
+  people: () => people, get stage() { return stage; }, get rw() { return rw; }, S, setEnv, setMode, setTab, selectMuscle, addPerson: (id) => { const p = addPerson(id); renderPeople(); layout(); return p; },
   update(uid, patch) { const p = byUid(uid); Object.assign(p.cfg, patch); p.scen = null; recompute(p); renderPeople(); },
   advance(sec, fps = 60) { for (let k = 0, n = Math.round(sec * fps); k < n; k++) tick(0, (1 / fps) * S.anim); },
   get booted() { return booted; },

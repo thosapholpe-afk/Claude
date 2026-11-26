@@ -134,7 +134,7 @@ export const FS = 1000;
 // Returns {raw, env} arrays covering the last `win` seconds, ending at simulation time tNow.
 export function rawWindow(m, prof, side, id, phiNow, tNow, win, seed) {
   const N = Math.round(win * FS), raw = new Float32Array(N), env = new Float32Array(N);
-  const off = side === "L" ? 0.5 : 0, sf = m.legs[side].sf, P = prof[side][id];
+  const off = side === "L" ? m.offL ?? 0.5 : 0, sf = m.legs[side].sf, P = prof[side][id];
   const n0 = Math.floor(tNow * FS) - N + 1;
   for (let k = 0; k < N; k++) {
     const n = n0 + k, dt = (Math.floor(tNow * FS) - n) / FS;

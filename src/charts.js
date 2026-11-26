@@ -20,11 +20,11 @@ export function attachHover(c) {
   c.addEventListener("pointermove", (e) => { const r = c.getBoundingClientRect(); c._hover = { x: e.clientX - r.left, y: e.clientY - r.top }; });
   c.addEventListener("pointerleave", () => { c._hover = null; });
 }
-export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false, diff = null, bands = false, lo: fLo, hi: fHi, pct = false, unit = "", dp = 1 }) {
+export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false, diff = null, bands = false, lo: fLo, hi: fHi, pct = false, unit = "", dp = 1, ranges = [], xfmt = null, hoverTitle = null }) {
   const { ctx, w, h } = fit(c);
   ctx.clearRect(0, 0, w, h);
-  const pl = 38, pr = 8, pt = bands ? 22 : 10, pb = 20, W = w - pl - pr, H = h - pt - pb;
-  const all = series.flatMap((s) => Array.from(s.data)).concat(diff ? Array.from(diff) : []);
+  const pl = 38, pr = 16, pt = bands ? 22 : 10, pb = 20, W = w - pl - pr, H = h - pt - pb;
+  const all = series.flatMap((s) => Array.from(s.data)).concat(diff ? Array.from(diff) : []).concat(ranges.flatMap((r) => [...r.lo, ...r.hi])).filter((v) => v === v);
   let lo = fLo ?? Math.min(...all), hi = fHi ?? Math.max(...all);
   if (fHi === undefined) { const pad = (hi - lo) * 0.12 || 1; lo -= fLo === undefined ? pad : 0; hi += pad; }
   if (zero) lo = Math.min(0, lo);
@@ -47,7 +47,14 @@ export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false
     ctx.fillStyle = "#5d7290"; ctx.fillText(pct ? Math.round(v * 100) + "%" : fmt(v), pl - 5, Y(v) + 3);
   }
   ctx.textAlign = "center";
-  for (const i of [0, 20, 40, 60, 80, 100]) ctx.fillText(i + "%", X(i), h - 5);
+  for (const i of [0, 20, 40, 60, 80, 100]) ctx.fillText(xfmt ? xfmt(i) : i + "%", X(i), h - 5);
+  for (const r of ranges) {
+    ctx.fillStyle = r.color || "rgba(170,190,220,0.16)";
+    ctx.beginPath();
+    r.hi.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v))));
+    for (let i = r.lo.length - 1; i >= 0; i--) ctx.lineTo(X(i), Y(r.lo[i]));
+    ctx.closePath(); ctx.fill();
+  }
   if (lo < 0 && hi > 0) { ctx.strokeStyle = "rgba(160,200,255,0.2)"; ctx.beginPath(); ctx.moveTo(pl, Y(0)); ctx.lineTo(w - pr, Y(0)); ctx.stroke(); }
   for (const t of toeOff) {
     ctx.strokeStyle = t.color; ctx.globalAlpha = 0.4; ctx.setLineDash([2, 3]);
@@ -68,7 +75,9 @@ export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false
     ctx.strokeStyle = s.color; ctx.lineWidth = s.width || 2; ctx.globalAlpha = s.alpha ?? 1;
     ctx.setLineDash(s.dash || []);
     if (s.glow) { ctx.shadowColor = s.color; ctx.shadowBlur = 8; }
-    ctx.beginPath(); s.data.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v)))); ctx.stroke();
+    ctx.beginPath(); let pen = false;
+    s.data.forEach((v, i) => { if (v !== v) { pen = false; return; } if (pen) ctx.lineTo(X(i), Y(v)); else { ctx.moveTo(X(i), Y(v)); pen = true; } });
+    ctx.stroke();
     ctx.restore();
   }
   for (const k of cursors) {
@@ -81,7 +90,7 @@ export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false
     ctx.save();
     ctx.strokeStyle = "rgba(220,235,255,0.55)"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.moveTo(X(i), pt); ctx.lineTo(X(i), pt + H); ctx.stroke(); ctx.setLineDash([]);
-    const rows = series.filter((s) => s.label).map((s) => ({ s, v: s.data[i] }));
+    const rows = series.filter((s) => s.label && s.data[i] === s.data[i]).map((s) => ({ s, v: s.data[i] }));
     for (const { s, v } of rows) { ctx.fillStyle = s.color; ctx.strokeStyle = "#081325"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X(i), Y(v), 4, 0, 7); ctx.fill(); ctx.stroke(); }
     ctx.font = `11px ${MONO}`;
     const lines = rows.map(({ s, v }) => `${s.label}  ${pct ? Math.round(v * 100) + "%" : v.toFixed(dp)}${pct ? "" : unit}`);
@@ -89,7 +98,7 @@ export function drawCompare(c, { series, toeOff = [], cursors = [], zero = false
     let bx = X(i) + 12, by = Math.max(pt, Math.min(hv.y - bh / 2, pt + H - bh));
     if (bx + bw > w - pr) bx = X(i) - 12 - bw;
     ctx.fillStyle = "rgba(4,12,26,0.92)"; ctx.strokeStyle = "rgba(120,190,255,0.3)"; ctx.fillRect(bx, by, bw, bh); ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
-    ctx.fillStyle = "#9fb6d2"; ctx.textAlign = "left"; ctx.fillText(`${i}% ของรอบการเดิน`, bx + 9, by + 14);
+    ctx.fillStyle = "#9fb6d2"; ctx.textAlign = "left"; ctx.fillText(hoverTitle ? hoverTitle(i) : `${i}% ของรอบการเดิน`, bx + 9, by + 14);
     rows.forEach(({ s }, k) => {
       ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(bx + 12, by + 27 + k * 16, 4, 0, 7); ctx.fill();
       ctx.fillStyle = "#eaf4ff"; ctx.fillText(lines[k], bx + 21, by + 31 + k * 16);
@@ -221,4 +230,33 @@ export function drawContact(c, lanes, now) {
   });
   ctx.fillStyle = "#5d7290"; ctx.font = `10px ${MONO}`; ctx.textAlign = "center";
   for (let t = Math.ceil(t0); t <= now; t++) ctx.fillText(t.toFixed(0) + " s", X(t), h - 5);
+}
+
+// stance timeline: rows [{label, color, spans:[[t0,t1]], ic:[t], to:[t]}] over [t0, t1] seconds, cursor = current time
+export function drawTimeline(c, rows, { t0 = 0, t1 = 1, cursor = null, passes = [] } = {}) {
+  const { ctx, w, h } = fit(c);
+  ctx.clearRect(0, 0, w, h);
+  const pl = 64, pr = 10, pt = 8, pb = 20, W = w - pl - pr, rh = (h - pt - pb) / Math.max(1, rows.length);
+  const X = (t) => pl + ((t - t0) / Math.max(1e-6, t1 - t0)) * W;
+  c._tl = { pl, W, t0, t1 };
+  for (const p of passes) { ctx.fillStyle = "rgba(120,170,255,0.05)"; ctx.fillRect(X(p[0]), pt, X(p[1]) - X(p[0]), h - pt - pb); }
+  ctx.font = `10px ${MONO}`; ctx.fillStyle = "#6c809d"; ctx.textAlign = "center";
+  const step = niceStep((t1 - t0) / 6);
+  for (let t = Math.ceil(t0 / step) * step; t <= t1 + 1e-9; t += step) {
+    ctx.fillText(fmt(t) + " s", X(t), h - 5);
+    ctx.strokeStyle = "rgba(140,190,255,0.07)"; ctx.beginPath(); ctx.moveTo(X(t), pt); ctx.lineTo(X(t), h - pb); ctx.stroke();
+  }
+  rows.forEach((r, k) => {
+    const y = pt + k * rh, bh = Math.min(22, rh * 0.55), yc = y + rh / 2;
+    ctx.fillStyle = r.color; ctx.font = "500 12.5px Kanit, 'IBM Plex Sans Thai', sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(r.label, 4, yc + 4);
+    ctx.fillStyle = "rgba(140,190,255,0.06)"; ctx.fillRect(pl, yc - bh / 2, W, bh);
+    for (const [a, b] of r.spans) { ctx.globalAlpha = 0.75; ctx.fillStyle = r.color; ctx.fillRect(X(a), yc - bh / 2, Math.max(1, X(b) - X(a)), bh); ctx.globalAlpha = 1; }
+    ctx.fillStyle = "#eaf4ff";
+    for (const t of r.ic) { ctx.beginPath(); ctx.moveTo(X(t), yc - bh / 2 - 6); ctx.lineTo(X(t) - 4, yc - bh / 2 - 1); ctx.lineTo(X(t) + 4, yc - bh / 2 - 1); ctx.fill(); }
+    for (const t of r.to) { ctx.beginPath(); ctx.moveTo(X(t), yc + bh / 2 + 6); ctx.lineTo(X(t) - 4, yc + bh / 2 + 1); ctx.lineTo(X(t) + 4, yc + bh / 2 + 1); ctx.fill(); }
+  });
+  if (cursor !== null && cursor >= t0 && cursor <= t1) {
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(X(cursor), pt); ctx.lineTo(X(cursor), h - pb); ctx.stroke();
+  }
 }

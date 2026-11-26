@@ -31,7 +31,7 @@ export class Stage {
     this.canvas = canvas;
     const r = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" }));
     r.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
-    r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1;
+    r.toneMapping = THREE.AgXToneMapping; r.toneMappingExposure = 1;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
     const sc = (this.scene = new THREE.Scene());
     this.U = { uTime: { value: 0 }, uWind: { value: 1 }, uG: { value: 0 } };
@@ -52,6 +52,8 @@ export class Stage {
     sc.add(this.sun); sc.add(this.sun.target);
     this.rimA = new THREE.DirectionalLight(0x3388ff, 2); sc.add(this.rimA);
     this.rimB = new THREE.DirectionalLight(0x66ddff, 1); sc.add(this.rimB);
+    // soft fill that follows the camera so faces are never lost in shadow
+    this.fill = new THREE.DirectionalLight(0xfff6ee, 0.55); sc.add(this.fill); sc.add(this.fill.target);
 
     this.arrows = new Map();
 
@@ -91,7 +93,8 @@ export class Stage {
     canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.lost = true; if (this.onLost) this.onLost(); });
     this.camTween = null;
     this.resize();
-    new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
+    const ro = new ResizeObserver(() => this.resize());
+    ro.observe(canvas.parentElement); ro.observe(canvas);
   }
 
   pick(e) {
@@ -108,7 +111,7 @@ export class Stage {
     this.renderer.setSize(w, h, false);
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;
-    this.camera.fov = w / h < 1 ? 46 : 32;
+    this.camera.fov = w / h < 0.8 ? 46 : w / h < 1.2 ? 38 : 32;
     this.camera.updateProjectionMatrix();
     this.pointScale = this.renderer.domElement.height / 2 / Math.tan((this.camera.fov * Math.PI) / 360);
   }
@@ -189,6 +192,8 @@ export class Stage {
       if (c.t >= 1) this.camTween = null;
     }
     this.controls.update();
+    this.fill.position.copy(this.camera.position).add(new THREE.Vector3(0, 1.2, 0));
+    this.fill.target.position.copy(this.controls.target);
     if (this.env) this.env.update(ctx.envDt ?? dt, t, ctx);
   }
 

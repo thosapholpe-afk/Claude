@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gait Lab Simulator</title>
-<meta name="description" content="จำลองการเดินแบบ 3 มิติ เทียบ Type 1 กับ Type 2: BMI กับมุมเข่า, ขาเทียมใต้เข่า, คลื่น EMG ของกล้ามเนื้อตาม gait cycle และฉากสวน ชายหาด โรงงาน หิมะ">
+<meta name="description" content="จำลองการเดินแบบ 3 มิติ เทียบหลายคน (BMI กับมุมเข่า ขาเทียมใต้เข่า EMG) และโหมด Real World วิเคราะห์การเดินจากคลิปวิดีโอจริงด้วย AI ในเบราว์เซอร์">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
@@ -21,76 +21,138 @@
   </div>
 </div>
 <noscript><div class="boot-err" style="position:fixed;inset:auto 16px 16px 16px">ต้องเปิด JavaScript เพื่อใช้งานหน้านี้</div></noscript>
-<section class="hero" id="hero">
-  <canvas id="gl"></canvas>
-  <div class="vignette"></div>
-  <div class="scan"></div>
-  <svg class="callout" id="callout" aria-hidden="true"><polyline id="cLine" points="0,0 0,0 0,0"/><circle id="cDot" r="5" cx="0" cy="0"/><circle id="cRing" r="11" cx="0" cy="0"/></svg>
-  <div class="htip" id="htip"></div>
 
-  <header class="hud-top">
-    <div class="brand">
-      <div class="logo"><span></span></div>
-      <div>
-        <div class="title">GAIT<b>//</b>LAB</div>
-        <div class="subtitle">BIOMECHANICS · EMG · 3D GAIT SIMULATOR</div>
-      </div>
-    </div>
+<section class="hero" id="hero" data-mode="sim">
+  <header class="topbar">
+    <div class="brand"><div class="logo"><span></span></div><div class="title">GAIT<b>//</b>LAB</div></div>
+    <nav class="modes" id="modeSeg" aria-label="โหมด">
+      <button data-v="sim" class="on">จำลองการเดิน</button>
+      <button data-v="rw">Real World<span class="badge">วิดีโอจริง</span></button>
+    </nav>
     <div class="tools">
-      <div class="envs" id="envSeg">
-        <button data-v="lab" class="on"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg><span>ห้องแล็บ</span></button>
-        <button data-v="garden"><svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c-4 0-7-3-7-7 4 0 7 3 7 7zm0 0c0-4 3-7 7-7 0 4-3 7-7 7z"/></svg><span>สวน</span></button>
-        <button data-v="beach"><svg viewBox="0 0 24 24"><path d="M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5M5 13a7 7 0 0 1 14 0z"/></svg><span>ชายหาด</span></button>
-        <button data-v="factory"><svg viewBox="0 0 24 24"><path d="M3 21V10l5 3V10l5 3V6l8 4v11zM7 17h2m3 0h2m3 0h2"/></svg><span>โรงงาน</span></button>
-        <button data-v="snow"><svg viewBox="0 0 24 24"><path d="M12 2v20M4 6l16 12M20 6 4 18M9 4l3 2 3-2M9 20l3-2 3 2"/></svg><span>หิมะ</span></button>
+      <div class="envs" id="envSeg" aria-label="ฉาก">
+        <button data-v="lab" class="on" title="ห้องแล็บ (1)"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg><span>แล็บ</span></button>
+        <button data-v="garden" title="สวน (2)"><svg viewBox="0 0 24 24"><path d="M12 22V12M12 12c-4 0-7-3-7-7 4 0 7 3 7 7zm0 0c0-4 3-7 7-7 0 4-3 7-7 7z"/></svg><span>สวน</span></button>
+        <button data-v="beach" title="ชายหาด (3)"><svg viewBox="0 0 24 24"><path d="M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5M5 13a7 7 0 0 1 14 0z"/></svg><span>ทะเล</span></button>
+        <button data-v="factory" title="โรงงาน (4)"><svg viewBox="0 0 24 24"><path d="M3 21V10l5 3V10l5 3V6l8 4v11zM7 17h2m3 0h2m3 0h2"/></svg><span>โรงงาน</span></button>
+        <button data-v="snow" title="หิมะ (5)"><svg viewBox="0 0 24 24"><path d="M12 2v20M4 6l16 12M20 6 4 18M9 4l3 2 3-2M9 20l3-2 3 2"/></svg><span>หิมะ</span></button>
       </div>
-      <div class="row2">
-        <div class="seg" id="viewSeg"><button data-v="lanes" class="on">แยกเลน</button><button data-v="ghost">ซ้อนทับ</button></div>
-        <div class="seg" id="focusSeg" hidden></div>
-        <button class="tog" id="ghostTog" hidden>+ ghost คนอื่น</button>
-        <div class="seg" id="camSeg">
-          <button data-v="cine" class="on">CINE</button><button data-v="side">SIDE</button><button data-v="front">FRONT</button><button data-v="back">REAR</button><button data-v="low">LOW</button><button data-v="close">CLOSE</button>
+      <div class="menu">
+        <button class="tog" id="camBtn" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg><span id="camName">มุมสวย</span></button>
+        <div class="pop" id="camPop" hidden>
+          <div class="camgrid" id="camSeg">
+            <button data-v="cine" class="on">มุมสวย</button><button data-v="side">ด้านข้าง</button><button data-v="front">ด้านหน้า</button>
+            <button data-v="back">ด้านหลัง</button><button data-v="low">มุมต่ำ</button><button data-v="close">ใกล้</button>
+          </div>
+          <label class="chk"><input type="checkbox" id="orbitTog"><span>หมุนกล้องรอบอัตโนมัติ</span></label>
         </div>
-        <button class="tog" id="orbitTog">ORBIT</button>
       </div>
     </div>
   </header>
 
-  <aside class="mhud" id="mhud" hidden>
-    <div class="mh-top"><span class="mh-k" id="mhK"></span><button class="mh-x" id="mhX" aria-label="ปิด">×</button></div>
-    <div class="mh-n" id="mhN"></div>
-    <div class="mh-th" id="mhTh"></div>
-    <div class="mh-bars" id="mhBars"></div>
-    <canvas id="mhScope"></canvas>
-    <p class="mh-fn" id="mhFn"></p>
-    <a class="mh-go" href="#emgSec">ดูกราฟ EMG ทั้งหมด ↓</a>
-  </aside>
-
-  <div class="hud-bottom">
-    <div class="roster" id="roster"></div>
-    <div class="transport">
-      <button class="play" id="playBtn" aria-label="หยุด/เล่น"><span class="i-pause"></span></button>
-      <label><span>SLOW-MO</span><input type="range" id="anim" min="0.1" max="1.5" step="0.05" value="1"><output id="animOut">1.00×</output></label>
-      <label><span>ขยายมุมเข่า</span><input type="range" id="exag" min="1" max="5" step="0.5" value="1"><output id="exagOut">1×</output></label>
-      <label id="windLbl"><span>ลม</span><input type="range" id="wind" min="0" max="2.5" step="0.1" value="1"><output id="windOut">1.0</output></label>
-      <div class="tg2">
-        <button class="tog" id="emgTog">EMG</button>
-        <button class="tog on" id="grfTog">GRF</button>
+  <section class="rwp" id="rwp" hidden>
+    <div class="rw-empty" id="rwEmpty">
+      <div class="rw-kicker">REAL WORLD SIMULATION</div>
+      <h1>ถ่ายคลิปเพื่อนเดิน แล้วให้ AI บอกว่าเดินถูกหลักไหม</h1>
+      <p class="lead">AI หาจุดบนร่างกาย 33 จุดในทุกเฟรม วัดมุมสะโพก เข่า ข้อเท้า จังหวะก้าว และความสมมาตร แล้วเทียบกับการเดินปกติของคนวัย เพศ และรูปร่างเดียวกัน จากนั้นนำท่าเดินจริงไปขยับคน 3 มิติให้ดูเทียบกัน</p>
+      <div class="rw-btns">
+        <label class="btn pri"><input type="file" accept="video/*" capture="environment" id="rwCam" hidden><svg viewBox="0 0 24 24"><path d="M3 7h12v10H3zM15 10l6-3v10l-6-3"/></svg>ถ่ายคลิป</label>
+        <label class="btn"><input type="file" accept="video/*" id="rwFile" hidden><svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 20h16"/></svg>เลือกวิดีโอ</label>
+        <button class="btn ghost" id="rwDemo" data-demo="normal">ตัวอย่าง: เดินปกติ</button>
+        <button class="btn ghost" id="rwDemo2" data-demo="amp">ตัวอย่าง: ขาเทียม</button>
+      </div>
+      <div class="drop" id="rwDrop">หรือลากไฟล์วิดีโอมาวางตรงนี้</div>
+      <details class="guide" open>
+        <summary>ถ่ายอย่างไรให้วิเคราะห์ได้แม่น</summary>
+        <ol>
+          <li><b>ถ่ายจากด้านข้าง</b> วางกล้องนิ่ง ๆ (ขาตั้งหรือของที่มั่นคง) สูงประมาณสะโพก ห่างทางเดิน 3–4 เมตร</li>
+          <li><b>เห็นทั้งตัวตั้งแต่หัวจรดเท้า</b> เดินผ่านกล้อง 4–6 ก้าวด้วยความเร็วปกติ <b>เดินไปแล้วเดินกลับ</b> เพื่อให้เห็นขาทั้งสองข้าง</li>
+          <li><b>แสงสว่างพอ</b> ใส่กางเกงขาสั้นหรือรัดรูป เห็นเข่า ข้อเท้า และรองเท้าชัด มีคนเดียวในภาพ</li>
+          <li>อยากดู <b>เข่าบิดเข้าใน/โก่งออก</b> ถ่ายอีกคลิปจาก <b>ด้านหน้า</b> ให้เดินตรงเข้าหากล้อง</li>
+        </ol>
+      </details>
+      <p class="privacy"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>วิดีโอประมวลผลในเครื่องนี้เท่านั้น ไม่มีการอัปโหลด · ครั้งแรกต้องต่ออินเทอร์เน็ตเพื่อโหลดโมเดล AI ประมาณ 15–20 MB · ขออนุญาตเพื่อนก่อนถ่ายทุกครั้ง</span></p>
+    </div>
+    <div class="rw-work" id="rwWork" hidden>
+      <div class="rw-video" id="rwVideoBox">
+        <video id="rwVideo" playsinline muted preload="auto"></video>
+        <canvas id="rwOverlay"></canvas>
+        <div class="rw-busy" id="rwBusy" hidden><div class="ld-ring"></div><div class="rb-t" id="rwBusyT">กำลังเตรียม…</div><div class="rb-bar"><i id="rwBusyBar"></i></div><button class="btn ghost sm" id="rwCancel">ยกเลิก</button></div>
+      </div>
+      <div class="rw-ctl">
+        <button class="play sm" id="rwPlay" aria-label="เล่น/หยุดวิดีโอ"><span class="i-play"></span></button>
+        <input type="range" id="rwSeek" min="0" max="1000" value="0" step="1" aria-label="ตำแหน่งวิดีโอ">
+        <output id="rwTime">0.0 s</output>
+        <div class="seg sm" id="rwRate"><button data-v="0.25">¼×</button><button data-v="0.5" class="on">½×</button><button data-v="1">1×</button></div>
+        <label class="chk"><input type="checkbox" id="rwSkel" checked><span>โครงร่าง</span></label>
+      </div>
+      <form class="rw-form" id="rwForm" onsubmit="return false">
+        <label><span>ส่วนสูง (cm)</span><input type="number" id="rwHt" min="100" max="220" step="1" value="168" required></label>
+        <label><span>น้ำหนัก (kg)</span><input type="number" id="rwWt" min="25" max="200" step="0.5" value="62" required></label>
+        <label><span>อายุ</span><input type="number" id="rwAge" min="5" max="100" step="1" value="25" required></label>
+        <label><span>เพศ</span><select id="rwSex"><option value="M">ชาย</option><option value="F">หญิง</option></select></label>
+        <label><span>มุมกล้อง</span><select id="rwView"><option value="auto">ตรวจอัตโนมัติ</option><option value="side">ด้านข้าง</option><option value="front">ด้านหน้า/หลัง</option></select></label>
+        <label><span>ความละเอียด AI</span><select id="rwQ"><option value="lite">เร็ว (5.8 MB)</option><option value="full" selected>มาตรฐาน (9.4 MB)</option><option value="heavy">ละเอียดสุด (31 MB)</option></select></label>
+      </form>
+      <div class="rw-actions">
+        <button class="btn pri" id="rwGo">วิเคราะห์การเดิน</button>
+        <button class="btn ghost" id="rwNew">เปลี่ยนวิดีโอ</button>
+        <span class="rw-msg" id="rwMsg"></span>
       </div>
     </div>
+  </section>
+
+  <div class="stagebox" id="stagebox">
+    <canvas id="gl"></canvas>
+    <div class="vignette"></div>
+    <svg class="callout" id="callout" aria-hidden="true"><polyline id="cLine" points="0,0 0,0 0,0"/><circle id="cDot" r="5" cx="0" cy="0"/><circle id="cRing" r="11" cx="0" cy="0"/></svg>
+    <div class="htip" id="htip"></div>
+    <div class="viewbar" id="viewbar">
+      <div class="seg sm" id="viewSeg"><button data-v="lanes" class="on">แยกเลน</button><button data-v="ghost">ซ้อนทับ</button></div>
+      <div class="seg sm" id="focusSeg" hidden></div>
+      <button class="tog sm" id="ghostTog" hidden>แสดงคนอื่นแบบจาง</button>
+    </div>
+    <div class="rwlegend" id="rwLegend" hidden></div>
+    <aside class="mhud" id="mhud" hidden>
+      <div class="mh-top"><span class="mh-k" id="mhK"></span><button class="mh-x" id="mhX" aria-label="ปิด">×</button></div>
+      <div class="mh-n" id="mhN"></div>
+      <div class="mh-th" id="mhTh"></div>
+      <div class="mh-bars" id="mhBars"></div>
+      <canvas id="mhScope"></canvas>
+      <p class="mh-fn" id="mhFn"></p>
+      <button class="mh-go" data-goto="emg">ดูกราฟ EMG ทั้งหมด ↓</button>
+    </aside>
+    <div class="hud-bottom">
+      <div class="roster" id="roster"></div>
+      <div class="transport">
+        <button class="play" id="playBtn" aria-label="หยุด/เล่น"><span class="i-pause"></span></button>
+        <label class="spd" title="ความเร็วการเล่น"><span>ความเร็ว</span><input type="range" id="anim" min="0.1" max="1.5" step="0.05" value="1"><output id="animOut">1.00×</output></label>
+        <button class="tog" id="emgTog" title="แสดงการทำงานของกล้ามเนื้อบนตัวคน">EMG</button>
+        <div class="menu">
+          <button class="tog icon" id="moreBtn" aria-label="ตั้งค่าเพิ่มเติม" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>
+          <div class="pop up" id="morePop" hidden>
+            <label class="row"><span>ขยายมุมเข่า (varus/IR)</span><input type="range" id="exag" min="1" max="5" step="0.5" value="1"><output id="exagOut">1×</output></label>
+            <label class="row" id="windLbl"><span>แรงลม</span><input type="range" id="wind" min="0" max="2.5" step="0.1" value="1"><output id="windOut">1.0</output></label>
+            <label class="chk"><input type="checkbox" id="grfTog" checked><span>ลูกศรแรงปฏิกิริยาพื้น (GRF)</span></label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="hint" id="hint">คลิกที่ขา สะโพก หรือหลังของคนเพื่อดูกล้ามเนื้อและคลื่น EMG · ลากเพื่อหมุนกล้อง</div>
+    <div class="loader" id="loader"><div class="ld-ring"></div><div class="ld-t">LOADING</div><div class="ld-s" id="ldName"></div></div>
   </div>
-  <div class="hint" id="hint">คลิกที่กล้ามเนื้อบนตัวโมเดลเพื่อดูคลื่น EMG · ลากเพื่อหมุนกล้อง</div>
-  <div class="loader" id="loader"><div class="ld-ring"></div><div class="ld-t">LOADING ENVIRONMENT</div><div class="ld-s" id="ldName"></div></div>
 </section>
 
-<main class="deck">
-  <section class="sec">
-    <div class="sec-h"><span class="idx">01</span><h2>ผู้เดิน · เทียบได้สูงสุด 6 คน</h2><p>แต่ละคนใช้สีของตัวเองทั้งเสื้อในฉาก 3 มิติ และเส้นกราฟ กด "+ เพิ่มคน" เพื่อเทียบเพิ่ม</p></div>
+<nav class="tabs" id="tabs" aria-label="หัวข้อ"></nav>
+<main class="deck" id="deck">
+  <!-- ======================= simulation tabs ======================= -->
+  <section class="tab" data-tab="people" data-mode="sim">
+    <div class="sec-h"><h2>ผู้เดิน · เทียบได้สูงสุด 6 คน</h2><p>แต่ละคนมีสีของตัวเองทั้งเสื้อในฉาก 3 มิติ และเส้นกราฟ · กด "ปรับ" เพื่อเปลี่ยนอายุ น้ำหนัก ส่วนสูง หรือรูปแบบการเดิน</p></div>
     <div class="people" id="people"></div>
   </section>
 
-  <section class="sec" id="cmpSec">
-    <div class="sec-h"><span class="idx">02</span><h2>เทียบกราฟหลายคนพร้อมกัน</h2><p>ค่าตลอดรอบการเดิน (0–100%) เส้นประแนวตั้งคือจังหวะยกเท้าพ้นพื้น (toe-off) จุดที่วิ่งบนเส้นคือตำแหน่งปัจจุบัน</p></div>
+  <section class="tab" data-tab="cmp" data-mode="sim" id="cmpSec" hidden>
+    <div class="sec-h"><h2>เทียบกราฟหลายคน</h2><p>ค่าตลอดรอบการเดิน 0–100% เส้นประแนวตั้งคือจังหวะยกเท้าพ้นพื้น (toe-off) จุดบนเส้นคือตำแหน่งปัจจุบัน</p></div>
     <div class="cmpbar">
       <div class="legend" id="legend"></div>
       <div class="ctrls">
@@ -102,8 +164,8 @@
     <div class="charts" id="charts"></div>
   </section>
 
-  <section class="sec" id="emgSec">
-    <div class="sec-h"><span class="idx">03</span><h2>กล้ามเนื้อและคลื่น EMG ตาม gait cycle</h2><p>เลือกกล้ามเนื้อจากรายการ จาก heatmap หรือคลิกบนตัวโมเดล ค่าเป็น % MVC ของสัญญาณ EMG ผิวกาย (จำลอง)</p></div>
+  <section class="tab" data-tab="emg" data-mode="sim" id="emgSec" hidden>
+    <div class="sec-h"><h2>กล้ามเนื้อและคลื่น EMG ตาม gait cycle</h2><p>เลือกกล้ามเนื้อจากรายการ จาก heatmap หรือคลิกบนตัวคนในฉาก · ค่าเป็น % MVC ของ EMG ผิวกาย (จำลอง)</p></div>
     <div class="emg">
       <div class="mlist" id="mlist"></div>
       <div class="emg-main">
@@ -114,53 +176,95 @@
           </div>
           <p class="m-fn" id="mFn"></p>
           <div class="m-notes" id="mNotes"></div>
-          <div class="ct">ENVELOPE · % MVC ตลอดรอบการเดิน</div>
+          <div class="ct">Envelope · % MVC ตลอดรอบการเดิน</div>
           <canvas id="envChart"></canvas>
         </div>
-        <div class="card"><div class="ct">RAW sEMG · จำลองที่ 1 kHz · เส้นขาวคือ envelope</div><canvas id="scope"></canvas></div>
+        <div class="card"><div class="ct">Raw sEMG จำลองที่ 1 kHz · เส้นขาวคือ envelope</div><canvas id="scope"></canvas></div>
         <div class="card mats" id="mats"></div>
       </div>
     </div>
   </section>
 
-  <section class="sec grid2">
-    <div>
-      <div class="sec-h"><span class="idx">04</span><h2>ตัวชี้วัด</h2><p>ค่าของแต่ละคนเรียงตามสีในกราฟ</p></div>
-      <div class="card"><table class="tbl" id="metrics"></table></div>
-    </div>
-    <div id="tcnSec">
-      <div class="sec-h"><span class="idx">05</span><h2>ตรวจจับ gait events ด้วย IMU + TCN</h2><p>แถบ = เท้าแตะพื้นจริง (vGRF &gt; 20 N) · เส้น = ค่าที่ TCN ทำนาย · ▲ IC / ▼ FC พร้อม error (ms)</p></div>
-      <div class="card"><canvas id="contact"></canvas></div>
-      <div class="card" style="margin-top:12px"><table class="tbl" id="events"></table></div>
+  <section class="tab" data-tab="metrics" data-mode="sim" hidden>
+    <div class="grid2">
+      <div>
+        <div class="sec-h"><h2>ตัวชี้วัด</h2><p>ค่าของแต่ละคนเรียงตามสี</p></div>
+        <div class="card"><table class="tbl" id="metrics"></table></div>
+      </div>
+      <div id="tcnSec">
+        <div class="sec-h"><h2>ตรวจจับ gait events ด้วย IMU + TCN</h2><p>แถบ = เท้าแตะพื้นจริง (vGRF &gt; 20 N) · เส้น = ค่าที่ TCN ทำนาย · ▲ IC / ▼ FC พร้อม error (ms)</p></div>
+        <div class="card"><canvas id="contact"></canvas></div>
+        <div class="card" style="margin-top:12px"><table class="tbl" id="events"></table></div>
+      </div>
     </div>
   </section>
 
-  <section class="sec grid2">
-    <div>
-      <div class="sec-h"><span class="idx">06</span><h2>โมเดลนี้จำลองอะไร</h2></div>
-      <div class="card notes">
-        <p><b>BMI กับมุมเข่า (งานวิจัยรามาฯ):</b> BMI เพิ่มทุก 1 kg/m² ทำให้มุม varus ตอนส้นเท้าแตะพื้นลดลง 0.33° และ internal rotation เพิ่มขึ้น 0.9–1.1° ผลนี้พบในผู้เข้าร่วมที่มี BMI ปกติทั้งหมด</p>
-        <p><b>ระดับ BMI (Ahsan 2022):</b> มุมข้อต่อและแรงที่ข้อต่อเปลี่ยนตามระดับ BMI โมเดลนี้ใส่แนวโน้มตามนั้น คือ เดินช้าลง stance ยาวขึ้น เข่างอตอนรับน้ำหนักน้อยลง ฐานก้าวกว้างขึ้น และโมเมนต์ที่เข่าสูงขึ้น ส่วนขนาดของผลเป็นค่าสาธิต</p>
-        <p><b>ขาเทียมใต้เข่า (Apidech et al. 2026):</b> ความเร็วมาจาก Table 2 ทั้งค่าเฉลี่ยกลุ่มและรายบุคคล S01–S12 ส่วน error ของ IC/FC สุ่มจาก Table 6 และค่า F1 มาจาก Table 5</p>
-        <p><b>EMG:</b> จังหวะการทำงานของกล้ามเนื้อปกติอิงรูปแบบมาตรฐานของการเดิน (Perry &amp; Burnfield; Winter) ส่วนการปรับตาม BMI อายุ และขาเทียม เป็นค่าประมาณเพื่อสาธิต สัญญาณ raw เป็นสัญญาณสังเคราะห์ ไม่ใช่ข้อมูลที่วัดจริง</p>
-        <p><b>หุ่นคนจริง:</b> ใช้ร่างกายมนุษย์จาก MakeHuman (CC0) แบบชาวเอเชีย รูปร่างเปลี่ยนตามเพศ อายุ และ BMI ผ่าน body-shape targets แล้วขยับด้วยโครงกระดูกตามโมเดลการเดิน เสื้อผ้า ผม และรองเท้าสร้างจากผิวของร่างกาย จึงขยับไปพร้อมกัน</p>
-        <p><b>ฉาก:</b> พื้นเลื่อนตามเท้าที่วางอยู่ (foot-lock) เท้าจึงไม่ไถล ทรายและหิมะยุบตัวตามรูปเท้า และลึกขึ้นตามน้ำหนักตัว ฝั่งขาเทียมจะเห็นรอยเท้าเป็นรูปเท้าคาร์บอน</p>
+  <section class="tab" data-tab="about" data-mode="sim" hidden>
+    <div class="grid2">
+      <div>
+        <div class="sec-h"><h2>โมเดลนี้จำลองอะไร</h2></div>
+        <div class="card notes">
+          <p><b>BMI กับมุมเข่า (งานวิจัยรามาฯ):</b> BMI เพิ่มทุก 1 kg/m² ทำให้มุม varus ตอนส้นเท้าแตะพื้นลดลง 0.33° และ internal rotation เพิ่มขึ้น 0.9–1.1° ผลนี้พบในผู้เข้าร่วมที่มี BMI ปกติทั้งหมด</p>
+          <p><b>ระดับ BMI (Ahsan 2022):</b> มุมข้อต่อและแรงที่ข้อต่อเปลี่ยนตามระดับ BMI โมเดลนี้ใส่แนวโน้มตามนั้น คือ เดินช้าลง stance ยาวขึ้น เข่างอตอนรับน้ำหนักน้อยลง ฐานก้าวกว้างขึ้น และโมเมนต์ที่เข่าสูงขึ้น ส่วนขนาดของผลเป็นค่าสาธิต</p>
+          <p><b>ขาเทียมใต้เข่า (Apidech et al. 2026):</b> ความเร็วมาจาก Table 2 ทั้งค่าเฉลี่ยกลุ่มและรายบุคคล S01–S12 ส่วน error ของ IC/FC สุ่มจาก Table 6 และค่า F1 มาจาก Table 5</p>
+          <p><b>EMG:</b> จังหวะการทำงานของกล้ามเนื้อปกติอิงรูปแบบมาตรฐานของการเดิน (Perry &amp; Burnfield; Winter) ส่วนการปรับตาม BMI อายุ และขาเทียม เป็นค่าประมาณเพื่อสาธิต สัญญาณ raw เป็นสัญญาณสังเคราะห์</p>
+          <p><b>คนเสมือนจริง:</b> ร่างกายจาก MakeHuman (CC0) แบบชาวเอเชีย รูปร่างเปลี่ยนตามเพศ อายุ และ BMI แล้วขยับด้วยโครงกระดูกตามโมเดลการเดิน</p>
+          <p><b>Real World:</b> MediaPipe Pose Landmarker (BlazePose GHUM) หาจุดบนร่างกาย 33 จุดในแต่ละเฟรม แก้การสลับขาซ้าย–ขวาด้วยการติดตามตำแหน่ง (tracking) หา heel strike และ toe-off ด้วยวิธีของ Zeni et al. (2008) แล้วเทียบกับรูปแบบการเดินปกติจากโมเดลเดียวกับโหมดจำลอง ปรับตามอายุ เพศ BMI และความเร็วที่วัดได้ มุมข้อต่อใช้เฉพาะขาฝั่งใกล้กล้อง เพราะขาฝั่งไกลถูกบังบางส่วน</p>
+        </div>
+      </div>
+      <div>
+        <div class="sec-h"><h2>สัมประสิทธิ์และแหล่งอ้างอิง</h2></div>
+        <div class="card">
+          <div class="coef" id="coef"></div>
+          <div class="muted">อายุและเพศพบว่าสัมพันธ์กับมุมเข่า แต่ไม่ได้ระบุค่าสัมประสิทธิ์ไว้ จึงตั้งค่าเริ่มต้นเป็น 0 ให้กรอกเองจากตารางในงานวิจัย</div>
+          <ol class="refs">
+            <li>Apidech H, Kusakunniran W, Samala M, Jamkrajang P, Manupibul U, Niamsang W, Limroongreungrat W. <i>Real-Time Gait Events Detection Using IMU Combined With TCNs Model in Transtibial Amputees.</i> IEEE Access 14 (2026) 113223–113234. doi:10.1109/ACCESS.2026.3715835</li>
+            <li>งานวิจัยค่าปกติการเดิน รพ.รามาธิบดี: อายุ เพศ และ BMI สัมพันธ์กับมุมเข่า</li>
+            <li>Ahsan M. (2022): kinematics และ kinetics ของข้อต่อในกลุ่มน้ำหนักปกติ น้ำหนักเกิน และอ้วน</li>
+            <li>Perry J, Burnfield JM. <i>Gait Analysis: Normal and Pathological Function</i>, 2nd ed. (2010)</li>
+            <li>Winter DA. <i>The Biomechanics and Motor Control of Human Gait</i>, 2nd ed. (1991)</li>
+            <li>Zeni JA, Richards JG, Higginson JS. Two simple methods for determining gait events during treadmill and overground walking using kinematic data. <i>Gait &amp; Posture</i> 27 (2008) 710–714</li>
+            <li>Stenum J, Rossi C, Roemmich RT. Two-dimensional video-based analysis of human gait using pose estimation. <i>PLoS Comput Biol</i> 17 (2021) e1008935</li>
+            <li>Bohannon RW, Andrews AW. Normal walking speed: a descriptive meta-analysis. <i>Physiotherapy</i> 97 (2011) 182–189</li>
+            <li>MediaPipe Pose Landmarker (Apache-2.0) · MakeHuman base mesh, targets, skeleton &amp; eyes (CC0 1.0)</li>
+          </ol>
+          <div class="muted warn">เป็นเครื่องมือเพื่อการเรียนการสอนและการคัดกรองเบื้องต้นเท่านั้น ไม่ใช่เครื่องมือวินิจฉัย</div>
+        </div>
       </div>
     </div>
-    <div>
-      <div class="sec-h"><span class="idx">07</span><h2>สัมประสิทธิ์และแหล่งอ้างอิง</h2></div>
-      <div class="card">
-        <div class="coef" id="coef"></div>
-        <div class="muted">อายุและเพศพบว่าสัมพันธ์กับมุมเข่า แต่ไม่ได้ระบุค่าสัมประสิทธิ์ไว้ จึงตั้งค่าเริ่มต้นเป็น 0 ให้กรอกเองจากตารางในงานวิจัย</div>
-        <ol class="refs">
-          <li>Apidech H, Kusakunniran W, Samala M, Jamkrajang P, Manupibul U, Niamsang W, Limroongreungrat W. <i>Real-Time Gait Events Detection Using IMU Combined With TCNs Model in Transtibial Amputees.</i> IEEE Access 14 (2026) 113223–113234. doi:10.1109/ACCESS.2026.3715835</li>
-          <li>งานวิจัยค่าปกติการเดิน รพ.รามาธิบดี: อายุ เพศ และ BMI สัมพันธ์กับมุมเข่า</li>
-          <li>Ahsan M. (2022): kinematics และ kinetics ของข้อต่อในกลุ่มน้ำหนักปกติ น้ำหนักเกิน และอ้วน</li>
-          <li>Perry J, Burnfield JM. <i>Gait Analysis: Normal and Pathological Function</i>, 2nd ed. (2010)</li>
-          <li>Winter DA. <i>The Biomechanics and Motor Control of Human Gait</i>, 2nd ed. (1991)</li>
-          <li>MakeHuman base mesh, targets, skeleton &amp; eyes (CC0 1.0): github.com/makehumancommunity/makehuman</li>
-        </ol>
-        <div class="muted warn">เป็นเครื่องมือเพื่อการเรียนการสอนและการสาธิตเท่านั้น ไม่ใช่เครื่องมือวินิจฉัย</div>
+  </section>
+
+  <!-- ======================= real world tabs ======================= -->
+  <section class="tab" data-tab="rw-sum" data-mode="rw" hidden>
+    <div class="rw-none" id="rwNone">ยังไม่มีผลวิเคราะห์ · ถ่ายหรือเลือกคลิปการเดินด้านบน แล้วกด "วิเคราะห์การเดิน" หรือกดดูตัวอย่าง</div>
+    <div id="rwSum" hidden>
+      <div class="scorecard" id="rwScore"></div>
+      <div class="sec-h"><h2>เช็กตามหลักการเดินที่ถูกต้อง</h2><p>เทียบกับการเดินปกติของคนอายุ เพศ BMI และความเร็วเดียวกัน · กดแต่ละข้อเพื่อดูคำอธิบายและคำแนะนำ</p></div>
+      <div class="checks" id="rwChecks"></div>
+    </div>
+  </section>
+  <section class="tab" data-tab="rw-charts" data-mode="rw" hidden>
+    <div class="sec-h"><h2>มุมข้อต่อตลอดรอบการเดิน</h2><p>แถบเทาคือช่วงค่าปกติของคนรูปร่างและความเร็วเดียวกัน · เส้นจางคือแต่ละรอบ · เส้นเข้มคือค่าเฉลี่ย · 0% = ส้นเท้าแตะพื้น</p></div>
+    <div class="rwlegend2" id="rwChLegend"></div>
+    <div class="charts" id="rwCharts"></div>
+    <div class="sec-h" style="margin-top:22px"><h2>ไทม์ไลน์ตามวิดีโอ</h2><p>แถบ = ช่วงที่เท้าแตะพื้น (stance) ของแต่ละขา · คลิกเพื่อไปยังเวลานั้นในวิดีโอ</p></div>
+    <div class="card"><canvas id="rwTimeline"></canvas></div>
+  </section>
+  <section class="tab" data-tab="rw-table" data-mode="rw" hidden>
+    <div class="grid2">
+      <div>
+        <div class="sec-h"><h2>ค่าที่วัดได้ เทียบค่าปกติ</h2></div>
+        <div class="card"><table class="tbl" id="rwTbl"></table></div>
+      </div>
+      <div>
+        <div class="sec-h"><h2>ความน่าเชื่อถือของผล</h2></div>
+        <div class="card" id="rwRel"></div>
+        <div class="sec-h" style="margin-top:22px"><h2>นำไปใช้ต่อ</h2></div>
+        <div class="card rw-next">
+          <button class="btn" id="rwToSim">เพิ่มเข้าโหมดจำลอง เพื่อเทียบกับคนอื่น</button>
+          <button class="btn ghost" id="rwSwap">สลับขาซ้าย/ขวา (ถ้าวิดีโอกลับด้าน)</button>
+          <button class="btn ghost" id="rwExport">ดาวน์โหลดผล (CSV)</button>
+        </div>
       </div>
     </div>
   </section>

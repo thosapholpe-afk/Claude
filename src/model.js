@@ -40,14 +40,17 @@ export function model(o, C = COEF_DEFAULT) {
   const ampSide = o.mode === "ampL" ? "L" : o.mode === "ampR" ? "R" : null;
   const a60 = Math.max(0, o.age - 60);
   const subj = amp && o.subject ? subjectById(o.subject) : null;
+  const meas = o.meas || null;
   let v;
-  if (amp) v = subj ? subj.speeds[o.speed] : AMP_SPEED[o.speed];
+  if (meas) v = meas.v;
+  else if (o.v) v = o.v;
+  else if (amp) v = subj ? subj.speeds[o.speed] : AMP_SPEED[o.speed];
   else {
     const base = 1.25 * { comf: 1, fast: 1.2, slow: 0.8, self: 1.05 }[o.speed];
     v = base * clamp(1 - 0.008 * dBp, 0.75, 1) * clamp(1 - 0.004 * Math.max(0, o.age - 40), 0.78, 1);
   }
-  const strideLen = h * (0.45 + 0.3 * v) * clamp(1 - 0.004 * a60, 0.85, 1);
-  const T = strideLen / v;
+  const strideLen = meas ? meas.strideLen : h * (0.45 + 0.3 * v) * clamp(1 - 0.004 * a60, 0.85, 1);
+  const T = meas ? meas.T : strideLen / v;
   const sfBase = clamp(0.62 - 0.05 * (v - 1.0), 0.57, 0.68) + (amp ? 0 : clamp(0.0025 * dBp, 0, 0.05));
   const BW = o.wt * 9.81;
   const varOff = C.var * dB + C.varAge * (o.age - 35) + (o.sex === "F" ? C.varSex : 0);
@@ -73,6 +76,7 @@ export function model(o, C = COEF_DEFAULT) {
       abdSwing: isAmp ? 5 : 0,
       varOff, irOff,
     };
+    if (meas) p.sf = meas.sf[side];
     let p1 = 1.0 + 0.18 * (v - 0.6), p2 = 1.0 + 0.15 * (v - 0.6) * pushScale;
     if (isSou) { p1 += 0.08; p2 += 0.03; }
     if (isAmp) { p1 -= 0.03; p2 = 0.93 + 0.05 * (v - 0.6); }
@@ -84,12 +88,13 @@ export function model(o, C = COEF_DEFAULT) {
     o, bmi, dB, dBp, v, T, strideLen, cadence: 120 / T, BW, amp, ampSide, subj, h,
     stepW, hipHalf, addOffset, girth, pushScale,
     hipExtOff: 0.12 * a60,
-    trunkFlex: 3 + 0.25 * dBp + 0.18 * a60 + (amp ? 2 : 0),
+    trunkFlex: meas ? meas.trunk : 3 + 0.25 * dBp + 0.18 * a60 + (amp ? 2 : 0),
+    meas, offL: meas ? meas.offL : 0.5,
     latLean: amp ? 5 : 0,
     sway: 0.02 + 0.15 * (stepW - 0.09) + (amp ? 0.012 : 0),
     pelvisRot: 4 * clamp(v / 1.1, 0.6, 1.2),
     armAbd: 7 + 0.9 * dBp,
-    armSwing: 0.55 * clamp(v / 1.1, 0.5, 1.15) * (amp ? 0.8 : 1),
+    armSwing: meas && meas.arm ? meas.arm : 0.55 * clamp(v / 1.1, 0.5, 1.15) * (amp ? 0.8 : 1),
     fpa: 7 + 0.3 * dBp,
     kamPct: 2.6 + 0.05 * dBp,
     legs: { R: leg("R"), L: leg("L") },
@@ -98,14 +103,25 @@ export function model(o, C = COEF_DEFAULT) {
 
 export function remap(p, sf) { return p < sf ? (p / sf) * 60 : 60 + ((p - sf) / (1 - sf)) * 40; }
 
+// periodic linear sample of a 101-point cycle curve at cycle fraction p
+export function sample(a, p) {
+  const x = frac(p) * 100, i = Math.floor(x), f = x - i;
+  return a[i] + (a[Math.min(100, i + 1)] - a[i]) * f;
+}
+
 export function angles(m, L, p) {
   const q = remap(p, L.sf);
-  const hip = interp(HIP, q) + m.hipExtOff * g(q, 50, 12);
-  const knee = interp(KNEE, q) + (L.kLR - 18) * g(q, 15, 7) + (L.kSw - 62) * g(q, 73, 9);
-  let ank = interp(ANK, q) + (L.ankPO + 15) * g(q, 62, 6);
-  if (ank > 0) ank *= L.dorsi;
+  let hip, knee, ank;
+  const mc = m.meas && m.meas.curves[L.side];
+  if (mc) { hip = sample(mc.hip, p); knee = sample(mc.knee, p); ank = sample(mc.ank, p); }
+  else {
+    hip = interp(HIP, q) + m.hipExtOff * g(q, 50, 12);
+    knee = interp(KNEE, q) + (L.kLR - 18) * g(q, 15, 7) + (L.kSw - 62) * g(q, 73, 9);
+    ank = interp(ANK, q) + (L.ankPO + 15) * g(q, 62, 6);
+    if (ank > 0) ank *= L.dorsi;
+  }
   return {
-    hip, knee: Math.max(0, knee), ank,
+    hip, knee: mc ? knee : Math.max(0, knee), ank,
     varus: interp(VAR, q) + L.varOff,
     ir: interp(IRK, q) + L.irOff,
     add: interp(ADD, q) + m.addOffset - L.abdSwing * g(q, 80, 11),
