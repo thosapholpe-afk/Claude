@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gait Lab Simulator</title>
+<meta name="description" content="จำลองการเดินแบบ 3 มิติ เทียบ Type 1 กับ Type 2: BMI กับมุมเข่า และการเดินด้วยขาเทียมใต้เข่า พร้อมการตรวจจับ gait events ด้วย IMU + TCN">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>/*CSS*/</style>
+</head>
+<body>
+<section class="hero" id="hero">
+  <canvas id="gl"></canvas>
+  <div class="vignette"></div>
+  <div class="scan"></div>
+
+  <header class="hud-top">
+    <div class="brand">
+      <div class="logo"><span></span></div>
+      <div>
+        <div class="title">GAIT<b>//</b>LAB</div>
+        <div class="subtitle">BIOMECHANICS · 3D GAIT SIMULATOR</div>
+      </div>
+    </div>
+    <div class="tools">
+      <div class="seg" id="viewSeg">
+        <button data-v="lanes" class="on">แยกเลน</button>
+        <button data-v="ghost">ซ้อนทับ</button>
+      </div>
+      <div class="seg" id="camSeg">
+        <button data-v="cine" class="on">CINE</button>
+        <button data-v="side">SIDE</button>
+        <button data-v="front">FRONT</button>
+        <button data-v="back">REAR</button>
+        <button data-v="low">LOW</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="hud-bottom">
+    <div class="readout" id="ro0"></div>
+    <div class="transport">
+      <button class="play" id="playBtn" aria-label="หยุด/เล่น"><span class="i-pause"></span></button>
+      <label><span>SLOW-MO · ลากภาพเพื่อหมุนกล้อง</span><input type="range" id="anim" min="0.1" max="1.5" step="0.05" value="1"><output id="animOut">1.00×</output></label>
+      <label><span>ขยายมุม frontal/transverse</span><input type="range" id="exag" min="1" max="5" step="0.5" value="1"><output id="exagOut">1×</output></label>
+    </div>
+    <div class="readout r2" id="ro1"></div>
+  </div>
+</section>
+
+<main class="deck">
+  <section class="sec">
+    <div class="sec-h"><span class="idx">01</span><h2>ตั้งค่า TYPE 1 / TYPE 2</h2><p>เลือก scenario หรือปรับค่าเอง ทั้งสองฝั่งเดินพร้อมกันบนลู่วิ่งแบบ dual-belt</p></div>
+    <div class="configs">
+      <div class="cfg" id="cfg0"></div>
+      <div class="cfg t2" id="cfg1"></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-h"><span class="idx">02</span><h2>เทียบกราฟ Type 1 กับ Type 2</h2><p>ค่าตลอดรอบการเดิน (0–100%) เส้นประแนวตั้งคือจังหวะยกเท้าพ้นพื้น (toe-off) จุดที่วิ่งบนเส้นคือตำแหน่งปัจจุบัน</p></div>
+    <div class="cmpbar">
+      <div class="legend"><span><i class="c1"></i>TYPE 1</span><span><i class="c2"></i>TYPE 2</span><span id="legLegend"></span></div>
+      <div class="ctrls">
+        <div class="seg sm" id="legSeg"><button data-v="L" class="on">ขาซ้าย</button><button data-v="R">ขาขวา</button><button data-v="B">ทั้งสองขา</button></div>
+        <div class="seg sm" id="unitSeg"><button data-v="N" class="on">N</button><button data-v="BW">×BW</button></div>
+        <div class="seg sm" id="diffSeg"><button data-v="0" class="on">ปกติ</button><button data-v="1">แสดง Δ</button></div>
+      </div>
+    </div>
+    <div class="charts" id="charts"></div>
+  </section>
+
+  <section class="sec grid2">
+    <div>
+      <div class="sec-h"><span class="idx">03</span><h2>ตัวชี้วัด</h2><p>Δ = TYPE 2 − TYPE 1</p></div>
+      <div class="card"><table class="tbl" id="metrics"></table></div>
+    </div>
+    <div>
+      <div class="sec-h"><span class="idx">04</span><h2>ตรวจจับ gait events ด้วย IMU + TCN</h2><p>แถบเทา = เท้าแตะพื้นจริง (vGRF &gt; 20 N) · เส้น = ค่าที่ TCN ทำนาย · ▲ IC / ▼ FC พร้อม error (ms)</p></div>
+      <div class="card"><canvas id="contact"></canvas></div>
+      <div class="card" style="margin-top:12px"><table class="tbl" id="events"></table></div>
+    </div>
+  </section>
+
+  <section class="sec grid2">
+    <div>
+      <div class="sec-h"><span class="idx">05</span><h2>โมเดลนี้จำลองอะไร</h2></div>
+      <div class="card notes">
+        <p><b>BMI กับมุมเข่า (งานวิจัยรามาฯ):</b> BMI เพิ่มทุก 1 kg/m² ทำให้มุม varus ตอนส้นเท้าแตะพื้นลดลง 0.33° และ internal rotation เพิ่มขึ้น 0.9–1.1° ผลนี้พบในผู้เข้าร่วมที่มี BMI ปกติทั้งหมด</p>
+        <p><b>ระดับ BMI (Ahsan 2022):</b> มุมข้อต่อและแรงที่ข้อต่อเปลี่ยนตามระดับ BMI โมเดลนี้ใส่แนวโน้มตามนั้น คือ เดินช้าลง stance ยาวขึ้น เข่างอตอนรับน้ำหนักน้อยลง ฐานก้าวกว้างขึ้น และโมเมนต์ที่เข่าสูงขึ้น ส่วนขนาดของผลเป็นค่าสาธิต</p>
+        <p><b>ขาเทียมใต้เข่า (Apidech et al. 2026):</b> ความเร็วมาจาก Table 2 ทั้งค่าเฉลี่ยกลุ่มและรายบุคคล S01–S12 ข้อเท้าเทียมไม่มีแรงถีบส่ง ฝั่งขาดี stance ยาวกว่าและรับแรงมากกว่า ส่วน error ของ IC/FC สุ่มจาก Table 6 และค่า F1 มาจาก Table 5</p>
+        <p><b>ท่าทางทั้งตัว:</b> เชิงกรานหมุนและเอียง ลำตัวหมุนสวน แขนแกว่งสวนกับขา จุดศูนย์ถ่วงโยกซ้ายขวา เท้าแตะพื้นจริงด้วยการล็อกเท้ากับสายพาน และร่างกายถูกสร้างตามสัดส่วนมนุษย์ (Winter) ปรับตามส่วนสูง BMI และเพศ</p>
+      </div>
+    </div>
+    <div>
+      <div class="sec-h"><span class="idx">06</span><h2>สัมประสิทธิ์และแหล่งอ้างอิง</h2></div>
+      <div class="card">
+        <div class="coef" id="coef"></div>
+        <div class="muted">อายุและเพศพบว่าสัมพันธ์กับมุมเข่า แต่ไม่ได้ระบุค่าสัมประสิทธิ์ไว้ จึงตั้งค่าเริ่มต้นเป็น 0 ให้กรอกเองจากตารางในงานวิจัย</div>
+        <ol class="refs">
+          <li>Apidech H, Kusakunniran W, Samala M, Jamkrajang P, Manupibul U, Niamsang W, Limroongreungrat W. <i>Real-Time Gait Events Detection Using IMU Combined With TCNs Model in Transtibial Amputees.</i> IEEE Access 14 (2026) 113223–113234. doi:10.1109/ACCESS.2026.3715835</li>
+          <li>งานวิจัยค่าปกติการเดิน รพ.รามาธิบดี: อายุ เพศ และ BMI สัมพันธ์กับมุมเข่า</li>
+          <li>Ahsan M. (2022): kinematics และ kinetics ของข้อต่อในกลุ่มน้ำหนักปกติ น้ำหนักเกิน และอ้วน</li>
+        </ol>
+        <div class="muted warn">เป็นเครื่องมือเพื่อการเรียนการสอนและการสาธิตเท่านั้น ไม่ใช่เครื่องมือวินิจฉัย กราฟมุมข้อต่อพื้นฐานเป็นรูปทรงมาตรฐานของการเดินปกติที่ปรับตามพารามิเตอร์</div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>/*JS*/</script>
+</body>
+</html>

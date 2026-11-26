@@ -1,0 +1,15 @@
+{
+  "name": "gait-simulator",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "three": "0.160.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}
