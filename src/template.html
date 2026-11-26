@@ -7,10 +7,20 @@
 <meta name="description" content="จำลองการเดินแบบ 3 มิติ เทียบ Type 1 กับ Type 2: BMI กับมุมเข่า, ขาเทียมใต้เข่า, คลื่น EMG ของกล้ามเนื้อตาม gait cycle และฉากสวน ชายหาด โรงงาน หิมะ">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <style>/*CSS*/</style>
 </head>
 <body>
+<div class="boot" id="boot">
+  <div class="boot-in">
+    <div class="logo"><span></span></div>
+    <div class="boot-t">GAIT<b>//</b>LAB</div>
+    <div class="boot-bar"><i id="bootBar"></i></div>
+    <div class="boot-msg" id="bootMsg">กำลังโหลด…</div>
+    <div class="boot-err" id="bootErr" hidden></div>
+  </div>
+</div>
+<noscript><div class="boot-err" style="position:fixed;inset:auto 16px 16px 16px">ต้องเปิด JavaScript เพื่อใช้งานหน้านี้</div></noscript>
 <section class="hero" id="hero">
   <canvas id="gl"></canvas>
   <div class="vignette"></div>

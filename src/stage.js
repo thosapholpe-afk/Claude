@@ -30,7 +30,7 @@ export class Stage {
   constructor(canvas) {
     this.canvas = canvas;
     const r = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" }));
-    r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    r.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1;
     r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
     const sc = (this.scene = new THREE.Scene());
@@ -55,7 +55,10 @@ export class Stage {
 
     this.arrows = new Map();
 
-    const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4 });
+    // HDR target when the GPU can render to half-float; plain 8-bit otherwise (older mobile GPUs)
+    const ext = r.extensions, gl2 = r.capabilities.isWebGL2;
+    const halfOK = gl2 && (ext.has("EXT_color_buffer_float") || ext.has("EXT_color_buffer_half_float"));
+    const rt = new THREE.WebGLRenderTarget(2, 2, { type: halfOK ? THREE.HalfFloatType : THREE.UnsignedByteType, samples: gl2 ? 4 : 0 });
     this.composer = new EffectComposer(r, rt);
     this.composer.addPass(new RenderPass(sc, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), 0.6, 0.5, 1.1);
@@ -85,6 +88,7 @@ export class Stage {
     });
     canvas.addEventListener("pointerleave", () => { if (this.onHover) this.onHover(null); });
 
+    canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.lost = true; if (this.onLost) this.onLost(); });
     this.camTween = null;
     this.resize();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
@@ -107,6 +111,17 @@ export class Stage {
     this.camera.fov = w / h < 1 ? 46 : 32;
     this.camera.updateProjectionMatrix();
     this.pointScale = this.renderer.domElement.height / 2 / Math.tan((this.camera.fov * Math.PI) / 360);
+  }
+
+  // automatic quality steps for slower devices: 1 = lower resolution + smaller shadows, 2 = no bloom
+  setQuality(level) {
+    if (level >= 1) {
+      this.renderer.setPixelRatio(1);
+      this.sun.shadow.mapSize.set(1024, 1024);
+      if (this.sun.shadow.map) { this.sun.shadow.map.dispose(); this.sun.shadow.map = null; }
+      this.resize();
+    }
+    if (level >= 2) this.bloom.enabled = false;
   }
 
   setEnv(id) {

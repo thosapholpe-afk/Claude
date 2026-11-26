@@ -1,3 +1,4 @@
 node_modules/
 *.png
 tools/.cache/
+src/assets/human.gz

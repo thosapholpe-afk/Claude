@@ -1,6 +1,7 @@
 // Realistic human built from the MakeHuman hm08 base mesh (CC0), driven by the gait model.
 import * as THREE from "three";
-import humanBin from "./assets/human.bin";
+import humanGz from "./assets/human.gz";
+import { gunzipSync } from "fflate";
 import { rad, angles, clamp } from "./model.js";
 import { IMU_SITES } from "./data.js";
 
@@ -8,12 +9,16 @@ import { IMU_SITES } from "./data.js";
 let DATA = null;
 function data() {
   if (DATA) return DATA;
-  const u8 = humanBin, dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const u8 = gunzipSync(humanGz), dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   const hlen = dv.getUint32(0, true);
   const header = JSON.parse(new TextDecoder().decode(u8.subarray(4, 4 + hlen)));
   const base = 4 + hlen, A = {};
-  const T = { float32: Float32Array, uint16: Uint16Array, uint8: Uint8Array, int8: Int8Array };
+  const T = { float32: Float32Array, uint16: Uint16Array, uint8: Uint8Array, int8: Int8Array, int16: Int16Array };
   for (const [name, a] of Object.entries(header.arrays)) A[name] = new T[a.dtype](u8.slice(base + a.offset, base + a.offset + a.bytes).buffer);
+  A.basef = new Float32Array(A.base.length);
+  for (let i = 0; i < A.base.length; i++) A.basef[i] = A.base[i] * header.pscale;
+  A.ruvf = new Float32Array(A.ruv.length);
+  for (let i = 0; i < A.ruv.length; i++) A.ruvf[i] = A.ruv[i] / 65535;
   const B = header.bones.map((b) => ({ ...b }));
   const index = Object.fromEntries(B.map((b, i) => [b.name, i]));
   DATA = { header, A, B, index, NB: 13380 };
@@ -50,7 +55,9 @@ function textures() {
   const eyeImg = new Image();
   const eye = new THREE.Texture(eyeImg); eye.colorSpace = THREE.SRGBColorSpace;
   eyeImg.onload = () => { eye.needsUpdate = true; };
-  eyeImg.src = URL.createObjectURL(new Blob([D.A.e_jpg], { type: "image/jpeg" }));
+  let bin = "";
+  for (let i = 0; i < D.A.e_jpg.length; i += 0x8000) bin += String.fromCharCode.apply(null, D.A.e_jpg.subarray(i, i + 0x8000));
+  eyeImg.src = "data:image/jpeg;base64," + btoa(bin);
   TEX = { pores, knit, strands, eye };
   return TEX;
 }
@@ -64,13 +71,13 @@ function cutPatch(mat, key) {
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float aCut; varying float vCut;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvCut = aCut;");
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vCut;").replace("#include <clipping_planes_fragment>", "#include <clipping_planes_fragment>\nif (vCut < 0.0) discard;");
   };
-  mat.customProgramCacheKey = () => "cut-" + key;
+  mat.customProgramCacheKey = () => (mat.isMeshDepthMaterial ? "dcut" : "cut");
   return mat;
 }
 function bmiToWeight(b) { return b <= 16.5 ? 0 : b < 22 ? ((b - 16.5) / 5.5) * 0.5 : b < 29 ? 0.5 + ((b - 22) / 7) * 0.5 : Math.min(1.75, 1 + (b - 29) / 15); }
 function morph(o) {
   const { header, A } = data();
-  const P = new Float32Array(A.base);
+  const P = new Float32Array(A.basef);
   const g = o.sex === "F" ? "female" : "male";
   const old = clamp((o.age - 25) / 65, 0, 1);
   const wv = bmiToWeight(o.wt / (o.ht / 100) ** 2);
@@ -79,7 +86,7 @@ function morph(o) {
     const t = header.targets.find((x) => x.name === name), idx = A["t_idx_" + name], d = A["t_d_" + name], k = w * t.scale;
     for (let i = 0; i < idx.length; i++) { const v = idx[i] * 3; P[v] += d[i * 3] * k; P[v + 1] += d[i * 3 + 1] * k; P[v + 2] += d[i * 3 + 2] * k; }
   };
-  for (const [age, aw] of [["young", 1 - old], ["old", old]]) {
+  for (const [age, aw] of [["young", 1]]) {
     add(`asian-${g}-${age}`, aw);
     if (wv < 0.5) add(`universal-${g}-${age}-averagemuscle-minweight`, (aw * (0.5 - wv)) / 0.5);
     else add(`universal-${g}-${age}-averagemuscle-maxweight`, (aw * (wv - 0.5)) / 0.5);
@@ -197,12 +204,12 @@ export class Human {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     geo.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
-    geo.setAttribute("uv", new THREE.BufferAttribute(A.ruv, 2));
+    geo.setAttribute("uv", new THREE.BufferAttribute(A.ruvf, 2));
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
     geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4));
     geo.setAttribute("skinWeight", new THREE.BufferAttribute(sw, 4));
     geo.setIndex(idx);
-    const skinMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, normalMap: tex.pores, normalScale: new THREE.Vector2(0.12, 0.12), sheen: 0.35, sheenRoughness: 0.55, sheenColor: new THREE.Color(0.85, 0.42, 0.32), clearcoat: 0.06, clearcoatRoughness: 0.5 });
+    const skinMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, normalMap: tex.pores, normalScale: new THREE.Vector2(0.12, 0.12), sheen: 0.35, sheenRoughness: 0.55, sheenColor: new THREE.Color(0.85, 0.42, 0.32) });
     const mesh = new THREE.SkinnedMesh(geo, skinMat);
     mesh.add(bones[0]);
     mesh.bind(skeleton);
@@ -211,29 +218,40 @@ export class Human {
     this.mesh = mesh;
 
     // ---------- shell garments from body regions (share skinning with the body)
-    const shell = (field, thick, mat, extra = null, skip = null) => {
-      const ids = [], ac = new Float32Array(nR);
-      for (let r = 0; r < nR; r++) ac[r] = cv(field, A.rv[r]);
+    // compact sub-mesh of the body (only the vertices a garment uses)
+    const subMesh = (sel, place) => {
+      const map = new Int32Array(nR).fill(-1), used = [], ids = [];
       for (let i = 0; i < A.tris.length; i += 3) {
         const a = A.tris[i], b = A.tris[i + 1], c = A.tris[i + 2];
-        if (Math.max(ac[a], ac[b], ac[c]) <= 0) continue;
-        if (skip && (skip(A.rv[a]) || skip(A.rv[b]) || skip(A.rv[c]))) continue;
-        ids.push(a, b, c);
+        if (!sel(a, b, c)) continue;
+        for (const r of [a, b, c]) { if (map[r] < 0) { map[r] = used.length; used.push(r); } ids.push(map[r]); }
       }
-      const p2 = new Float32Array(nR * 3);
-      for (let r = 0; r < nR; r++) {
-        const v = A.rv[r], t = typeof thick === "function" ? thick(v) : thick;
-        for (let k = 0; k < 3; k++) p2[r * 3 + k] = P[v * 3 + k] + nb[v * 3 + k] * t;
-      }
+      const n = used.length, p2 = new Float32Array(n * 3), n2 = new Float32Array(n * 3), uv2 = new Float32Array(n * 2), si2 = new Uint16Array(n * 4), sw2 = new Float32Array(n * 4);
+      used.forEach((r, j) => {
+        const v = A.rv[r];
+        place(v, r, j, p2);
+        for (let k = 0; k < 3; k++) n2[j * 3 + k] = nor[r * 3 + k];
+        uv2[j * 2] = A.ruvf[r * 2]; uv2[j * 2 + 1] = A.ruvf[r * 2 + 1];
+        for (let k = 0; k < 4; k++) { si2[j * 4 + k] = si[r * 4 + k]; sw2[j * 4 + k] = sw[r * 4 + k]; }
+      });
       const g2 = new THREE.BufferGeometry();
       g2.setAttribute("position", new THREE.BufferAttribute(p2, 3));
-      g2.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
-      g2.setAttribute("uv", new THREE.BufferAttribute(A.ruv, 2));
-      g2.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4));
-      g2.setAttribute("skinWeight", new THREE.BufferAttribute(sw, 4));
-      g2.setAttribute("aCut", new THREE.BufferAttribute(ac, 1));
-      if (extra) extra(g2);
+      g2.setAttribute("normal", new THREE.BufferAttribute(n2, 3));
+      g2.setAttribute("uv", new THREE.BufferAttribute(uv2, 2));
+      g2.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si2, 4));
+      g2.setAttribute("skinWeight", new THREE.BufferAttribute(sw2, 4));
       g2.setIndex(ids);
+      return { g2, used, map };
+    };
+    this.subMesh = subMesh;
+    const shell = (field, thick, mat) => {
+      const ac = new Float32Array(nR);
+      for (let r = 0; r < nR; r++) ac[r] = cv(field, A.rv[r]);
+      const { g2, used } = subMesh((a, b, c) => Math.max(ac[a], ac[b], ac[c]) > 0, (v, r, j, p2) => {
+        const t = typeof thick === "function" ? thick(v) : thick;
+        for (let k = 0; k < 3; k++) p2[j * 3 + k] = P[v * 3 + k] + nb[v * 3 + k] * t;
+      });
+      g2.setAttribute("aCut", new THREE.BufferAttribute(Float32Array.from(used, (r) => ac[r]), 1));
       const sm = new THREE.SkinnedMesh(g2, mat);
       sm.bind(skeleton, mesh.bindMatrix);
       sm.castShadow = true; sm.receiveShadow = true;
@@ -241,11 +259,11 @@ export class Human {
       body.add(sm);
       return sm;
     };
-    this.shirtMat = cutPatch(new THREE.MeshPhysicalMaterial({ color: this.color, roughness: 0.78, normalMap: tex.knit, normalScale: new THREE.Vector2(0.35, 0.35), sheen: 0.8, sheenRoughness: 0.6, sheenColor: new THREE.Color(1, 1, 1).lerp(this.color, 0.4) }), "shirt");
-    const shortsMat = cutPatch(new THREE.MeshPhysicalMaterial({ color: 0x14181f, roughness: 0.7, normalMap: tex.knit, normalScale: new THREE.Vector2(0.3, 0.3), sheen: 0.6, sheenRoughness: 0.5, sheenColor: new THREE.Color(0x4a5568) }), "shorts");
-    const shoeMat = cutPatch(new THREE.MeshPhysicalMaterial({ color: 0xe9edf2, roughness: 0.55, normalMap: tex.knit, normalScale: new THREE.Vector2(0.25, 0.25), sheen: 0.4, sheenColor: new THREE.Color(0xffffff) }), "shoe");
+    this.shirtMat = cutPatch(new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.8, normalMap: tex.knit, normalScale: new THREE.Vector2(0.35, 0.35) }), "shirt");
+    const shortsMat = cutPatch(new THREE.MeshStandardMaterial({ color: 0x161a22, roughness: 0.72, normalMap: tex.knit, normalScale: new THREE.Vector2(0.3, 0.3) }), "shorts");
+    const shoeMat = cutPatch(new THREE.MeshStandardMaterial({ color: 0xe9edf2, roughness: 0.55, normalMap: tex.knit, normalScale: new THREE.Vector2(0.25, 0.25) }), "shoe");
     this.shoeAccent = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.5 });
-    const hairMat = cutPatch(new THREE.MeshPhysicalMaterial({ color: new THREE.Color(...hair).multiplyScalar(1.4), roughness: 0.48, normalMap: tex.strands, normalScale: new THREE.Vector2(0.8, 0.8), sheen: 1, sheenRoughness: 0.35, sheenColor: new THREE.Color(0.32, 0.24, 0.18), clearcoat: 0.3, clearcoatRoughness: 0.4, side: THREE.DoubleSide }), "hair");
+    const hairMat = cutPatch(new THREE.MeshStandardMaterial({ color: new THREE.Color(...hair).multiplyScalar(1.4), roughness: 0.45, normalMap: tex.strands, normalScale: new THREE.Vector2(0.8, 0.8), side: THREE.DoubleSide }), "hair");
     shell(topCut, F ? 0.0035 : 0.0045, this.shirtMat);
     shell("shorts", 0.0055, shortsMat);
     const isAmp = { L: m.ampSide === "L", R: m.ampSide === "R" };
@@ -284,7 +302,7 @@ export class Human {
       for (let i = 0; i < 9; i++) pts.push([prof[i] * 1.07 + 0.005, -((i + 0.5) / 12) * 0.6 * Ls]);
       pts.push([0.022, -0.5 * Ls], [0.014, -0.53 * Ls], [0, -0.54 * Ls]);
       const lg = new THREE.LatheGeometry(pts.sort((a, b) => a[1] - b[1]).map(([r, y]) => new THREE.Vector2(r, y)), 40);
-      const carbon = new THREE.MeshPhysicalMaterial({ color: 0x111720, roughness: 0.3, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.06 });
+      const carbon = new THREE.MeshStandardMaterial({ color: 0x111720, roughness: 0.25, metalness: 0.4 });
       const titan = new THREE.MeshStandardMaterial({ color: 0xc8ced8, metalness: 1, roughness: 0.22 });
       const glowRing = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 1.4, 3.0).multiply(new THREE.Color(1, 1, 1)), toneMapped: false });
       const grp = new THREE.Group();
@@ -323,7 +341,7 @@ export class Human {
       sg.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(sI, 4));
       sg.setAttribute("skinWeight", new THREE.BufferAttribute(sW, 4));
       sg.computeVertexNormals();
-      const soleMat = new THREE.MeshPhysicalMaterial({ color: 0xf4f6f8, roughness: 0.6, clearcoat: 0.2 });
+      const soleMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.6 });
       const sm = new THREE.SkinnedMesh(sg, [soleMat, soleMat]);
       sm.bind(skeleton, mesh.bindMatrix); sm.castShadow = true; sm.receiveShadow = true; body.add(sm);
       this.mats.push(soleMat);
@@ -364,7 +382,7 @@ export class Human {
       eg.setAttribute("skinWeight", new THREE.BufferAttribute(esw, 4));
       eg.setIndex(Array.from(A.e_tris));
       eg.computeVertexNormals();
-      const eyeMat = new THREE.MeshPhysicalMaterial({ map: tex.eye, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05 });
+      const eyeMat = new THREE.MeshStandardMaterial({ map: tex.eye, roughness: 0.12 });
       const em = new THREE.SkinnedMesh(eg, eyeMat);
       em.bind(skeleton, mesh.bindMatrix); body.add(em);
       this.mats.push(eyeMat);
@@ -375,7 +393,7 @@ export class Human {
 
     // ---------- IMU sensors
     this.sites = {};
-    const dark = new THREE.MeshPhysicalMaterial({ color: 0x0b0f16, roughness: 0.3, metalness: 0.5, clearcoat: 1 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x0b0f16, roughness: 0.3, metalness: 0.5 });
     const led = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 1.6, 3.0), toneMapped: false });
     this.mats.push(dark, led);
     const site = (code, boneName, t, dir) => {
@@ -438,21 +456,18 @@ export class Human {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(...r);
     }
-    const pos = new Float32Array(nR * 3), col = new Float32Array(nR * 4);
-    for (let r = 0; r < nR; r++) {
-      const v = A.rv[r];
-      for (let k = 0; k < 3; k++) pos[r * 3 + k] = P[v * 3 + k] + nb[v * 3 + k] * 0.009;
-      col[r * 4] = col[r * 4 + 1] = col[r * 4 + 2] = 1;
-      col[r * 4 + 3] = v < NB ? Math.pow(A.mstr[v] / 255, 0.8) : 0;
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const inAny = new Uint8Array(nR);
+    for (const ids of groups.values()) for (const r of ids) inAny[r] = 1;
+    const { g2: g, map } = this.subMesh((a, b, c) => inAny[a] && inAny[b] && inAny[c], (v, r, j, p2) => { for (let k = 0; k < 3; k++) p2[j * 3 + k] = P[v * 3 + k] + nb[v * 3 + k] * 0.009; });
+    const nU = g.attributes.position.count, col = new Float32Array(nU * 4);
+    for (let r = 0; r < nR; r++) if (map[r] >= 0) { const j = map[r], v = A.rv[r]; col[j * 4] = col[j * 4 + 1] = col[j * 4 + 2] = 1; col[j * 4 + 3] = v < NB ? Math.pow(A.mstr[v] / 255, 0.8) : 0; }
     g.setAttribute("color", new THREE.BufferAttribute(col, 4));
-    g.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4));
-    g.setAttribute("skinWeight", new THREE.BufferAttribute(sw, 4));
+    g.deleteAttribute("normal"); g.deleteAttribute("uv");
     const index = [], mats = [];
     this.overlayKeys = [];
-    for (const [key, ids] of groups) {
+    g.setIndex(null);
+    for (const [key, ids0] of groups) {
+      const ids = ids0.map((r) => map[r]);
       g.addGroup(index.length, ids.length, mats.length);
       index.push(...ids);
       let mm = this.overlayMats[key];
@@ -464,8 +479,8 @@ export class Human {
       mats.push(mm); this.overlayKeys.push(key);
       // anchor = strongest vertex of the group
       let bv = -1, bs = -1;
-      for (const r of ids) { const v = A.rv[r]; if (A.mstr[v] > bs) { bs = A.mstr[v]; bv = r; } }
-      this.anchors[key] = bv;
+      for (const r of ids0) { const v = A.rv[r]; if (A.mstr[v] > bs) { bs = A.mstr[v]; bv = r; } }
+      this.anchors[key] = map[bv];
     }
     g.setIndex(index);
     const ov = new THREE.SkinnedMesh(g, mats);

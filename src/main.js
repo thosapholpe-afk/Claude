@@ -20,7 +20,7 @@ const scen = (id) => SCENARIOS.find((s) => s.id === id);
 const newSim = (phi) => ({ phi, t: 0, hist: [], marks: { R: [], L: [] }, stride: { R: {}, L: {} }, stats: { R: { ic: [], fc: [] }, L: { ic: [], fc: [] } }, lock: null });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-const stage = new Stage($("gl"));
+let stage = null;
 let people = [], uidSeq = 1;
 const byUid = (u) => people.find((p) => p.uid === u);
 const shown = () => people.filter((p) => p.show);
@@ -293,13 +293,13 @@ function renderMuscleInfo() {
 $("mhX").addEventListener("click", () => { S.selected = false; renderMuscleInfo(); updateHint(); });
 function updateHint() { $("hint").classList.toggle("off", S.selected); $("hint").textContent = S.emg ? "คลิกที่กล้ามเนื้อบนตัวคนเพื่อดูคลื่น EMG · ลากเพื่อหมุนกล้อง" : "คลิกที่ขา สะโพก หรือหลังของคนเพื่อดูกล้ามเนื้อและคลื่น EMG · ลากเพื่อหมุนกล้อง"; }
 const pickInfo = (hit) => (hit && hit.object.userData.figure ? hit.object.userData.figure.pickInfo(hit) : null);
-stage.onPick = (hit) => {
+const onPick = (hit) => {
   const ud = pickInfo(hit);
   if (!ud || !ud.muscle) { if (S.selected) { S.selected = false; renderMuscleInfo(); updateHint(); } return; }
   const p = people.find((x) => x.fig === ud.figure);
   selectMuscle(ud.muscle, ud.side, p ? p.uid : null);
 };
-stage.onHover = (hit, e) => {
+const onHover = (hit, e) => {
   const ud = pickInfo(hit), tip = $("htip");
   if (!ud || !ud.muscle) { tip.classList.remove("show"); return; }
   const p = people.find((x) => x.fig === ud.figure), mu = MUSCLE[ud.muscle], hr = $("hero").getBoundingClientRect();
@@ -555,8 +555,17 @@ function tick(dt, sdt) {
   }
   stage.update(dt, envT, { lanes: people.map((p) => p.lane), colors: people.map((p) => p.color), figVisible: people.map((p) => p.fig.root.visible), merged: S.merged ? 1 : 0, focusFig: S.env !== "lab" ? (byUid(S.focus) || people[0]).fig : null, envDt: sdt });
 }
+const perf = { n: 0, acc: 0, level: 0 };
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const raw = (now - last) / 1000, dt = Math.min(0.05, raw); last = now;
+  if (vis.hero && raw < 1) {
+    perf.n++; perf.acc += raw;
+    if (perf.n >= 90) {
+      const avg = perf.acc / perf.n;
+      if (avg > 1 / 26 && perf.level < 2) { perf.level++; stage.setQuality(perf.level); }
+      perf.n = 0; perf.acc = 0;
+    }
+  }
   for (const p of pending) recompute(p);
   pending.clear();
   tick(dt, S.playing ? dt * S.anim : 0);
@@ -575,16 +584,56 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-buildMuscleList();
-stage.setEnv("lab");
-addPerson("healthy");
-addPerson("obese");
-addPerson("ampL");
-renderPeople(); layout(); renderStatic(); renderCharts(); updateHint(); renderRoster();
-stage.view("cine", camScale());
-requestAnimationFrame(frame);
+// ---------------------------------------------------------------- boot (staged, with progress + visible errors)
+const bootLog = (window.__bootLog = []);
+const bootMsg = (t, pct) => { bootLog.push([Math.round(performance.now()), t]); $("bootMsg").textContent = t; $("bootBar").style.width = pct + "%"; };
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+let booted = false;
+function bootError(e) {
+  if (booted) return;
+  const el = $("bootErr");
+  el.hidden = false;
+  el.textContent = "เปิดไม่สำเร็จ: " + (e && e.message ? e.message : String(e)) + (e && e.stack ? "\n\n" + String(e.stack).split("\n").slice(0, 4).join("\n") : "");
+  $("bootMsg").textContent = "เกิดข้อผิดพลาด ลองเปิดด้วย Chrome, Edge หรือ Safari รุ่นใหม่";
+}
+window.addEventListener("error", (e) => bootError(e.error || e.message));
+window.addEventListener("unhandledrejection", (e) => bootError(e.reason));
+function hasWebGL() {
+  try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); } catch (e) { return false; }
+}
+async function boot() {
+  bootMsg("เตรียมกราฟิก 3 มิติ…", 8);
+  await nextFrame();
+  if (!hasWebGL()) throw new Error("เบราว์เซอร์หรืออุปกรณ์นี้เปิด WebGL ไม่ได้ (ต้องใช้กราฟิก 3 มิติ)");
+  stage = new Stage($("gl"));
+  stage.onPick = onPick; stage.onHover = onHover;
+  bootMsg("สร้างห้องแล็บ…", 18);
+  await nextFrame();
+  stage.setEnv("lab");
+  stage.onLost = () => { $("boot").classList.remove("done"); $("bootMsg").textContent = "การ์ดจอรีเซ็ต กรุณารีเฟรชหน้า (F5)"; };
+  buildMuscleList();
+  const defaults = ["healthy", "obese", "ampL"];
+  for (let i = 0; i < defaults.length; i++) {
+    bootMsg(`สร้างผู้เดินคนที่ ${i + 1} จาก ${defaults.length}…`, 28 + i * 18);
+    await nextFrame();
+    addPerson(defaults[i]);
+  }
+  renderPeople(); layout(); renderStatic(); renderCharts(); updateHint(); renderRoster();
+  stage.view("cine", camScale());
+  bootMsg("เตรียม shader…", 86);
+  await nextFrame();
+  try {
+    if (stage.renderer.compileAsync) await Promise.race([stage.renderer.compileAsync(stage.scene, stage.camera), new Promise((r) => setTimeout(r, 5000))]);
+  } catch (e) { /* compile lazily instead */ }
+  bootMsg("พร้อมแล้ว", 100);
+  booted = true;
+  requestAnimationFrame(frame);
+  setTimeout(() => $("boot").classList.add("done"), 200);
+}
+boot().catch(bootError);
 window.__gait = {
-  people: () => people, stage, S, setEnv, selectMuscle, addPerson: (id) => { const p = addPerson(id); renderPeople(); layout(); return p; },
+  people: () => people, get stage() { return stage; }, S, setEnv, selectMuscle, addPerson: (id) => { const p = addPerson(id); renderPeople(); layout(); return p; },
   update(uid, patch) { const p = byUid(uid); Object.assign(p.cfg, patch); p.scen = null; recompute(p); renderPeople(); },
   advance(sec, fps = 60) { for (let k = 0, n = Math.round(sec * fps); k < n; k++) tick(0, (1 / fps) * S.anim); },
+  get booted() { return booted; },
 };

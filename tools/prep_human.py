@@ -78,7 +78,7 @@ def read_target(rel):
 
 TARGETS = []
 for g in ("male", "female"):
-    for a in ("young", "old"):
+    for a in ("young",):
         TARGETS.append(f"asian-{g}-{a}")
         for w in ("minweight", "maxweight"):
             TARGETS.append(f"universal-{g}-{a}-averagemuscle-{w}")
@@ -319,31 +319,46 @@ img = Image.open(fetch("eyes/materials/brown_eye.png")).convert("RGB").resize((2
 buf = io.BytesIO(); img.save(buf, "JPEG", quality=88); eye_jpg = np.frombuffer(buf.getvalue(), np.uint8)
 print("eye verts", len(ev), "render", len(erv), "tris", len(etris) // 3, "jpg", len(eye_jpg))
 
+# ---------------------------------------------------------------- vertex subset (body + joints + eye/scale refs)
+need = set(range(NB))
+for b in bones: need.update(b["head"]); need.update(b["tail"])
+for r in refs: need.update(r)
+for k, (a, b2, _) in scale.items(): need.update((a, b2))
+keep = sorted(need)
+remap = np.full(NV, -1, np.int64); remap[keep] = np.arange(len(keep))
+assert (remap[:NB] == np.arange(NB)).all()
+print("kept vertices", len(keep), "of", NV)
+
 # ---------------------------------------------------------------- write binary
-arrays, header = [], {"bones": [], "targets": [], "muscles": MUSCLES, "scale": {k: list(v) for k, v in scale.items()}, "license": "MakeHuman assets CC0 1.0"}
+arrays, header = [], {"bones": [], "targets": [], "muscles": MUSCLES, "scale": {k: [int(remap[v[0]]), int(remap[v[1]]), v[2]] for k, v in scale.items()}, "license": "MakeHuman assets CC0 1.0"}
 def add(name, arr):
     arr = np.ascontiguousarray(arr)
     arrays.append((name, arr))
-add("base", V.astype(np.float32))
-add("rv", np.array(rv, np.uint16)); add("ruv", np.array(ruv, np.float32)); add("tris", np.array(tris, np.uint16))
-add("skinI", skin_i); add("skinW", skin_w)
+Vk = V[keep]
+pscale = float(np.abs(Vk).max()) / 32767
+header["pscale"] = pscale
+add("base", np.round(Vk / pscale).astype(np.int16))
+add("rv", np.array(rv, np.uint16)); add("ruv", np.round(np.clip(np.array(ruv), 0, 1) * 65535).astype(np.uint16)); add("tris", np.array(tris, np.uint16))
+add("skinI", skin_i[keep]); add("skinW", skin_w[keep])
 add("mid", mid); add("mstr", (mstr * 255).astype(np.uint8)); add("mside", mside)
 for k, v in CUTS.items(): add("cut_" + k, q8(v))
 add("brow", (np.clip(brow, 0, 1) * 255).astype(np.uint8)); add("lips", (np.clip(lips, 0, 1) * 255).astype(np.uint8))
 for name in TARGETS:
     idx, d = targets[name]
+    m = remap[idx] >= 0
+    idx, d = remap[idx[m]], d[m]
     sc = float(np.abs(d).max()) / 127 if len(d) else 1
     add("t_idx_" + name, idx.astype(np.uint16)); add("t_d_" + name, np.round(d / sc).astype(np.int8))
     header["targets"].append({"name": name, "scale": sc})
 jidx = []
 for b in bones:
     header["bones"].append({"name": b["name"], "parent": b["parent"], "head": [len(jidx), len(b["head"])], "tail": [len(jidx) + len(b["head"]), len(b["tail"])]})
-    jidx += list(b["head"]) + list(b["tail"])
+    jidx += [int(remap[v]) for v in b["head"]] + [int(remap[v]) for v in b["tail"]]
 add("jidx", np.array(jidx, np.uint16))
-add("e_ref", np.array(refs, np.uint16)); add("e_w", np.array(wts, np.float32)); add("e_off", np.array(offs, np.float32))
+add("e_ref", remap[np.array(refs)].astype(np.uint16)); add("e_w", np.array(wts, np.float32)); add("e_off", np.array(offs, np.float32))
 add("e_rv", np.array(erv, np.uint16)); add("e_uv", np.array(eruv, np.float32)); add("e_tris", np.array(etris, np.uint16)); add("e_jpg", eye_jpg)
-# extra landmarks used at runtime
 header["mouth"] = mouth.tolist(); header["eyeL"] = eyes["L"].tolist(); header["eyeR"] = eyes["R"].tolist()
+header["nv"] = len(keep)
 
 blobs, off = [], 0
 for name, arr in arrays:

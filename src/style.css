@@ -18,6 +18,20 @@ button{font:inherit;color:inherit}
 [hidden]{display:none!important}
 ::selection{background:var(--cy);color:#02101c}
 
+/* ---------- boot screen ---------- */
+.boot{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,#0a1d3d,#02060d 70%);transition:opacity .5s}
+.boot.done{opacity:0;pointer-events:none}
+.boot-in{display:grid;justify-items:center;gap:14px;padding:24px;max-width:520px;text-align:center}
+.boot .logo{width:46px;height:46px;border:1.5px solid #38c6ff;transform:rotate(45deg);display:grid;place-items:center;box-shadow:0 0 22px rgba(56,198,255,.45);animation:bootspin 2.4s ease-in-out infinite}
+.boot .logo span{width:15px;height:15px;background:#38c6ff;box-shadow:0 0 14px #38c6ff}
+@keyframes bootspin{50%{transform:rotate(225deg)}}
+.boot-t{font:700 30px/1 Kanit,system-ui,sans-serif;letter-spacing:.06em;color:#eaf4ff}
+.boot-t b{color:#38c6ff}
+.boot-bar{width:240px;height:3px;background:rgba(140,190,255,.15);overflow:hidden}
+.boot-bar i{display:block;height:100%;width:4%;background:linear-gradient(90deg,#2a5cff,#7fe3ff);box-shadow:0 0 10px #38c6ff;transition:width .3s}
+.boot-msg{font:12px/1.5 ui-monospace,Menlo,monospace;letter-spacing:.08em;color:#9fb6d2}
+.boot-err{font:13px/1.6 system-ui,sans-serif;color:#ffd2d2;background:rgba(120,20,30,.35);border:1px solid rgba(255,120,120,.35);padding:10px 14px;text-align:left;white-space:pre-wrap}
+
 /* ---------- hero ---------- */
 .hero{position:relative;height:min(90vh,940px);min-height:580px;overflow:hidden;background:#02060d;border-bottom:1px solid var(--line)}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
