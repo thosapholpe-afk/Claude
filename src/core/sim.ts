@@ -9,6 +9,7 @@ import { transpileArduino, TranspileError } from "./runtime/cxx";
 import { STOP, type Hal, type MqttHal } from "./runtime/hal";
 import { createPythonGlobals, patchPythonPrototypes } from "./runtime/python-api";
 import { transpilePython } from "./runtime/python";
+import { parseLadder, runLadder, type PlcState } from "./plc";
 
 export interface SerialLine {
   t: number;
@@ -29,6 +30,8 @@ export interface SimSnapshot {
   wireV: Record<string, number>;
   inserted: Topology["inserted"];
   frameDt: number;
+  /** Ladder monitor (PLC mode). */
+  plc?: PlcState;
 }
 
 export interface MqttMessage {
@@ -75,6 +78,11 @@ export class SimEngine implements Hal {
   inputs = new Map<string, Record<string, number | boolean>>();
   mems = new Map<string, Record<string, number>>();
   lib = new Map<string, Record<string, unknown>>();
+  plcState: PlcState | undefined;
+  /** Current latched/pressed input state of a part (buttons, selectors). */
+  getInput(partId: string) {
+    return this.inputs.get(partId) ?? {};
+  }
   interrupts = new Map<string, { fn: () => unknown; mode: string; last: number }>();
   t = 0;
   running = false;
@@ -509,13 +517,26 @@ export class SimEngine implements Hal {
     this.envCache = null;
     this.solver = new CircuitSolver();
     this.rebuildTopology(true);
-    this.emitSerial([{ t: 0, text: `▶ ${this.board.name} · ${lang === "arduino" ? "Arduino C++" : lang === "micropython" ? "MicroPython" : "Python 3"}`, kind: "sys" }]);
+    this.plcState = undefined;
+    this.emitSerial([{ t: 0, text: `▶ ${this.board.name} · ${lang === "arduino" ? "Arduino C++" : lang === "micropython" ? "MicroPython" : lang === "ladder" ? "Ladder diagram" : "Python 3"}`, kind: "sys" }]);
     this.lastFrameWall = performance.now();
     if (this.autoFrames) this.loopFrames();
     void this.runProgram(lang, code);
   }
 
   private async runProgram(lang: Lang, code: string) {
+    if (lang === "ladder") {
+      try {
+        await runLadder(this, parseLadder(code), (st) => (this.plcState = st));
+      } catch (e) {
+        if (e === STOP) return;
+        this.reportError(e);
+        this.setRunning(false);
+        this.stopFrames();
+        this.publishFrame(0, false);
+      }
+      return;
+    }
     let globals: Record<string, unknown>;
     let js: string;
     try {
@@ -701,6 +722,7 @@ export class SimEngine implements Hal {
       wireV,
       inserted: this.topo.inserted,
       frameDt: dtMs,
+      plc: this.plcState,
     };
     this.lastSnapshot = snap;
     this.frameListeners.forEach((l) => l(snap));

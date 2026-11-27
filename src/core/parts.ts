@@ -86,6 +86,10 @@ export interface PartDef {
   layout?: (props: Record<string, unknown>) => PartLayout;
   /** Click / hold on the canvas while running presses it (buttons, touch pads, joystick switch). */
   pressable?: boolean;
+  /** Click flips a latching control (selector, E-stop, breaker): returns the new input state. */
+  toggle?: (input: Record<string, unknown>) => Record<string, number | boolean>;
+  /** Short state shown on the inspector button, e.g. "ON" / "OFF". */
+  toggleLabel?: (input: Record<string, unknown>) => string;
 }
 
 export interface PartLayout {
@@ -951,6 +955,366 @@ export const PARTS: PartDef[] = [
       digitalOut(c, "DO", "GND", !det, s);
     },
     post: (c) => ({ powered: c.supply("VCC", "GND") > 2.8, indicator: Boolean(c.mem.det), reading: Math.round((c.mem.wet ?? 0) * 100), readingUnit: "% wet", outV: c.v(c.n("AO")) - c.v(c.n("GND")) }),
+  },
+  // ------------------------------------------------------------------ industrial control (24 V DC / 3-phase)
+  {
+    type: "pb-no",
+    name: "Push button NO (Start)",
+    category: "control",
+    description: "22 mm panel push button with a normally-open contact 3-4. Closes while pressed — hold it on the canvas while the simulation runs.",
+    w: 22.86,
+    h: 25.4,
+    h3: 18,
+    pins: [pin("3", "3 (NO)", 6.35, 22.86, "passive"), pin("4", "4 (NO)", 16.51, 22.86, "passive")],
+    props: [
+      { key: "color", label: "Color", type: "select", default: "green", options: ["green", "red", "black", "yellow", "blue", "white"].map((v) => ({ value: v, label: v })) },
+      { key: "legend", label: "Legend", type: "text", default: "START" },
+    ],
+    pressable: true,
+    switches: (_p, input) => (input.pressed ? [["3", "4"]] : []),
+    keywords: ["push button", "start", "no", "normally open", "ปุ่มกด", "สตาร์ท", "เริ่ม"],
+    post: (c) => ({ on: Boolean(c.input.pressed) }),
+  },
+  {
+    type: "pb-nc",
+    name: "Push button NC (Stop)",
+    category: "control",
+    description: "22 mm panel push button with a normally-closed contact 1-2. Opens while pressed.",
+    w: 22.86,
+    h: 25.4,
+    h3: 18,
+    pins: [pin("1", "1 (NC)", 6.35, 22.86, "passive"), pin("2", "2 (NC)", 16.51, 22.86, "passive")],
+    props: [
+      { key: "color", label: "Color", type: "select", default: "red", options: ["red", "green", "black", "yellow", "blue", "white"].map((v) => ({ value: v, label: v })) },
+      { key: "legend", label: "Legend", type: "text", default: "STOP" },
+    ],
+    pressable: true,
+    switches: (_p, input) => (input.pressed ? [] : [["1", "2"]]),
+    keywords: ["push button", "stop", "nc", "normally closed", "ปุ่มกด", "หยุด", "สต็อป"],
+    post: (c) => ({ on: Boolean(c.input.pressed) }),
+  },
+  {
+    type: "estop",
+    name: "Emergency stop",
+    category: "control",
+    description: "Mushroom-head latching E-stop with an NC contact 1-2. Click to hit it, click again to twist-release.",
+    w: 27.94,
+    h: 30.48,
+    h3: 30,
+    pins: [pin("1", "1 (NC)", 8.89, 27.94, "passive"), pin("2", "2 (NC)", 19.05, 27.94, "passive")],
+    props: [],
+    toggle: (i) => ({ latched: !i.latched }),
+    toggleLabel: (i) => (i.latched ? "LATCHED (open)" : "Released"),
+    switches: (_p, input) => (input.latched ? [] : [["1", "2"]]),
+    keywords: ["emergency", "e-stop", "estop", "mushroom", "ฉุกเฉิน", "หยุดฉุกเฉิน"],
+    post: (c) => ({ on: Boolean(c.input.latched) }),
+  },
+  {
+    type: "selector2",
+    name: "Selector switch 0-1",
+    category: "control",
+    description: "Two-position latching selector. NC 1-2 is closed at 0, NO 3-4 is closed at 1. Click to turn.",
+    w: 22.86,
+    h: 30.48,
+    h3: 20,
+    pins: [pin("1", "1 (NC)", 3.81, 27.94, "passive"), pin("2", "2 (NC)", 8.89, 27.94, "passive"), pin("3", "3 (NO)", 13.97, 27.94, "passive"), pin("4", "4 (NO)", 19.05, 27.94, "passive")],
+    props: [
+      { key: "label0", label: "Position 0", type: "text", default: "OFF" },
+      { key: "label1", label: "Position 1", type: "text", default: "ON" },
+    ],
+    toggle: (i) => ({ pos: i.pos ? 0 : 1 }),
+    toggleLabel: (i) => (i.pos ? "Position 1" : "Position 0"),
+    switches: (_p, input) => (input.pos ? [["3", "4"]] : [["1", "2"]]),
+    keywords: ["selector", "switch", "rotary", "on off", "สวิตช์", "ซีเลคเตอร์", "สวิตช์เลือก"],
+    post: (c) => ({ on: Boolean(c.input.pos), reading: Number(c.input.pos ?? 0), readingUnit: "pos" }),
+  },
+  {
+    type: "selector3",
+    name: "Selector switch 1-0-2",
+    category: "control",
+    description: "Three-position selector (e.g. MAN-OFF-AUTO). NO 13-14 closes at position 1 (left), NO 23-24 at position 2 (right). Click to turn.",
+    w: 22.86,
+    h: 30.48,
+    h3: 20,
+    pins: [pin("13", "13", 3.81, 27.94, "passive"), pin("14", "14", 8.89, 27.94, "passive"), pin("23", "23", 13.97, 27.94, "passive"), pin("24", "24", 19.05, 27.94, "passive")],
+    props: [
+      { key: "label1", label: "Left (1)", type: "text", default: "MAN" },
+      { key: "label0", label: "Center (0)", type: "text", default: "OFF" },
+      { key: "label2", label: "Right (2)", type: "text", default: "AUTO" },
+    ],
+    toggle: (i) => {
+      const step = (Number(i.step ?? 0) + 1) % 4;
+      return { step, pos: [0, 1, 0, 2][step] };
+    },
+    toggleLabel: (i) => ["Center (0)", "Left (1)", "Right (2)"][Number(i.pos ?? 0)] ?? "Center (0)",
+    switches: (_p, input) => (input.pos === 1 ? [["13", "14"]] : input.pos === 2 ? [["23", "24"]] : []),
+    keywords: ["selector", "3 position", "hand off auto", "man auto", "สวิตช์เลือก", "ออโต้", "แมนนวล"],
+    post: (c) => ({ reading: Number(c.input.pos ?? 0), readingUnit: "pos" }),
+  },
+  {
+    type: "limit-switch",
+    name: "Limit switch",
+    category: "control",
+    description: "Roller-lever limit switch with NC 1-2 and NO 3-4. Hold it on the canvas to actuate the lever.",
+    w: 30.48,
+    h: 35.56,
+    h3: 30,
+    pins: [pin("1", "1 (NC)", 5.08, 33.02, "passive"), pin("2", "2 (NC)", 10.16, 33.02, "passive"), pin("3", "3 (NO)", 20.32, 33.02, "passive"), pin("4", "4 (NO)", 25.4, 33.02, "passive")],
+    props: [],
+    pressable: true,
+    switches: (_p, input) => (input.pressed ? [["3", "4"]] : [["1", "2"]]),
+    keywords: ["limit switch", "lever", "end stop", "ลิมิตสวิตช์", "ลิมิต"],
+    post: (c) => ({ on: Boolean(c.input.pressed) }),
+  },
+  {
+    type: "pilot-lamp",
+    name: "Pilot lamp 24 V",
+    category: "control",
+    description: "22 mm LED indicator lamp for 24 V AC/DC (≈20 mA), terminals X1-X2.",
+    w: 22.86,
+    h: 25.4,
+    h3: 16,
+    pins: [pin("X1", "X1", 6.35, 22.86, "passive"), pin("X2", "X2", 16.51, 22.86, "passive")],
+    props: [{ key: "color", label: "Color", type: "select", default: "green", options: ["green", "red", "amber", "white", "blue"].map((v) => ({ value: v, label: v })) }],
+    keywords: ["pilot lamp", "indicator", "lamp", "ไฟแสดงสถานะ", "หลอดไฟ", "ไพลอตแลมป์"],
+    stamp: (c) => c.R(c.n("X1"), c.n("X2"), 1200),
+    post: (c) => {
+      const v = Math.abs(c.v(c.n("X1")) - c.v(c.n("X2")));
+      return { brightness: clamp(v / 24, 0, 1.25), on: v > 8, reading: v, readingUnit: "V", warn: v > 30 ? `Lamp sees ${v.toFixed(0)} V — rated 24 V` : undefined };
+    },
+  },
+  {
+    type: "contactor",
+    name: "Contactor 24 VDC (3P + NO + NC)",
+    category: "control",
+    description: "Magnetic contactor: coil A1-A2 (24 VDC, pull-in > 16 V), main poles L1-T1, L2-T2, L3-T3, auxiliary NO 13-14 and NC 21-22.",
+    w: 45.72,
+    h: 76.2,
+    h3: 75,
+    pins: [
+      pin("A1", "A1", 5.08, 2.54, "passive"),
+      pin("L1", "1/L1", 15.24, 2.54, "passive"),
+      pin("L2", "3/L2", 22.86, 2.54, "passive"),
+      pin("L3", "5/L3", 30.48, 2.54, "passive"),
+      pin("13", "13 NO", 38.1, 2.54, "passive"),
+      pin("21", "21 NC", 43.18, 2.54, "passive"),
+      pin("A2", "A2", 5.08, 73.66, "passive"),
+      pin("T1", "2/T1", 15.24, 73.66, "passive"),
+      pin("T2", "4/T2", 22.86, 73.66, "passive"),
+      pin("T3", "6/T3", 30.48, 73.66, "passive"),
+      pin("14", "14 NO", 38.1, 73.66, "passive"),
+      pin("22", "22 NC", 43.18, 73.66, "passive"),
+    ],
+    props: [],
+    switches: (_p, _i, mem) => (mem.on ? [["L1", "T1"], ["L2", "T2"], ["L3", "T3"], ["13", "14"]] : [["21", "22"]]),
+    keywords: ["contactor", "magnetic", "coil", "relay", "คอนแทคเตอร์", "แมกเนติก", "รีเลย์"],
+    stamp: (c) => c.R(c.n("A1"), c.n("A2"), 600),
+    post: (c) => {
+      const v = Math.abs(c.v(c.n("A1")) - c.v(c.n("A2")));
+      if (v > 16) c.mem.on = 1;
+      else if (v < 8) c.mem.on = 0;
+      return { on: Boolean(c.mem.on), reading: v, readingUnit: "V coil", warn: v > 30 ? `Coil sees ${v.toFixed(0)} V — this is a 24 V coil` : undefined };
+    },
+  },
+  {
+    type: "overload",
+    name: "Thermal overload relay",
+    category: "control",
+    description: "Bimetal overload on the motor line: main path L→T, NC 95-96 opens and NO 97-98 closes when tripped. Trips on > 120 % of the setting; click to test / reset.",
+    w: 45.72,
+    h: 40.64,
+    h3: 40,
+    pins: [
+      pin("L1", "L1", 15.24, 2.54, "passive"),
+      pin("L2", "L2", 22.86, 2.54, "passive"),
+      pin("L3", "L3", 30.48, 2.54, "passive"),
+      pin("95", "95 NC", 38.1, 2.54, "passive"),
+      pin("97", "97 NO", 43.18, 2.54, "passive"),
+      pin("T1", "T1", 15.24, 38.1, "passive"),
+      pin("T2", "T2", 22.86, 38.1, "passive"),
+      pin("T3", "T3", 30.48, 38.1, "passive"),
+      pin("96", "96 NC", 38.1, 38.1, "passive"),
+      pin("98", "98 NO", 43.18, 38.1, "passive"),
+    ],
+    props: [{ key: "setting", label: "Current setting", type: "number", default: 8, min: 0.5, max: 40, step: 0.5, unit: "A" }],
+    toggle: (i) => ({ tripped: !i.tripped }),
+    toggleLabel: (i) => (i.tripped ? "Tripped — click to reset" : "Normal — click to test"),
+    switches: (_p, _i, mem) => (mem.trip ? [["97", "98"]] : [["95", "96"]]),
+    keywords: ["overload", "thermal", "ol", "โอเวอร์โหลด", "ป้องกันมอเตอร์"],
+    stamp: (c) => {
+      for (const k of ["1", "2", "3"]) c.R(c.n(`L${k}`), c.n(`T${k}`), 0.02);
+      const req = c.input.tripped ? 1 : 0;
+      if (req !== (c.mem.req ?? 0)) {
+        c.mem.req = req;
+        c.mem.trip = req;
+        c.mem.heat = 0;
+      }
+    },
+    post: (c) => {
+      const I = Math.max(...["1", "2", "3"].map((k) => Math.abs(c.v(c.n(`L${k}`)) - c.v(c.n(`T${k}`))) / 0.02));
+      const set = Number(c.props.setting ?? 8);
+      c.mem.heat = Math.max(0, (c.mem.heat ?? 0) + (I > set * 1.2 ? c.dt : -c.dt * 0.3));
+      if (c.mem.heat > 2) c.mem.trip = 1;
+      return { on: Boolean(c.mem.trip), reading: I, readingUnit: "A", warn: c.mem.trip ? "Overload tripped — click it to reset" : I > set * 1.2 ? `Motor draws ${I.toFixed(1)} A (> ${set} A setting)` : undefined };
+    },
+  },
+  {
+    type: "timer-relay",
+    name: "Timer relay (on-delay)",
+    category: "control",
+    description: "On-delay timer, coil A1-A2 (24 V). After the set time, 15-18 (NO) closes and 15-16 (NC) opens. Star-delta, sequencing, delays.",
+    w: 22.86,
+    h: 76.2,
+    h3: 65,
+    pins: [
+      pin("A1", "A1", 5.08, 2.54, "passive"),
+      pin("15", "15", 15.24, 2.54, "passive"),
+      pin("A2", "A2", 5.08, 73.66, "passive"),
+      pin("16", "16 NC", 12.7, 73.66, "passive"),
+      pin("18", "18 NO", 17.78, 73.66, "passive"),
+    ],
+    props: [{ key: "delay", label: "Delay", type: "number", default: 3, min: 0.1, max: 600, step: 0.1, unit: "s" }],
+    switches: (_p, _i, mem) => (mem.done ? [["15", "18"]] : [["15", "16"]]),
+    keywords: ["timer", "on delay", "time delay relay", "ไทม์เมอร์", "หน่วงเวลา"],
+    stamp: (c) => c.R(c.n("A1"), c.n("A2"), 2000),
+    post: (c) => {
+      const v = Math.abs(c.v(c.n("A1")) - c.v(c.n("A2")));
+      const on = v > 16;
+      if (on && c.mem.since === undefined) c.mem.since = c.t;
+      if (!on) delete c.mem.since;
+      const el = on ? c.t - (c.mem.since ?? c.t) : 0;
+      c.mem.done = on && el >= Number(c.props.delay ?? 3) ? 1 : 0;
+      return { indicator: on, on: Boolean(c.mem.done), reading: el, readingUnit: "s" };
+    },
+  },
+  {
+    type: "psu24",
+    name: "Power supply 24 VDC",
+    category: "control",
+    description: "DIN-rail switching supply, 24 V / 2.5 A out on +V / −V. Tie −V to the PLC's 0V for a common reference.",
+    w: 45.72,
+    h: 60.96,
+    h3: 55,
+    pins: [pin("L", "L", 10.16, 2.54, "nc"), pin("N", "N", 17.78, 2.54, "nc"), pin("VP", "+V", 27.94, 58.42, "vcc"), pin("VN", "−V", 38.1, 58.42, "gnd")],
+    props: [],
+    keywords: ["power supply", "24v", "psu", "smps", "แหล่งจ่ายไฟ", "พาวเวอร์ซัพพลาย"],
+    stamp: (c) => c.V(c.n("VP"), c.n("VN"), 24, 0.05),
+    post: (c) => {
+      const v = c.v(c.n("VP")) - c.v(c.n("VN"));
+      const I = (24 - v) / 0.05;
+      return { powered: true, on: true, reading: v, readingUnit: "V", warn: I > 3 ? `Overloaded: ${I.toFixed(1)} A — short circuit?` : undefined };
+    },
+  },
+  {
+    type: "supply3",
+    name: "3-phase supply 400 V",
+    category: "control",
+    description: "Mains feed L1, L2, L3, N, PE. (The DC solver gives each phase a distinct level so motors can tell phase order and missing phases.)",
+    w: 45.72,
+    h: 20.32,
+    h3: 30,
+    pins: [pin("L1", "L1", 5.08, 17.78, "passive"), pin("L2", "L2", 12.7, 17.78, "passive"), pin("L3", "L3", 20.32, 17.78, "passive"), pin("N", "N", 30.48, 17.78, "passive"), pin("PE", "PE", 40.64, 17.78, "passive")],
+    props: [],
+    ties: [["N", "PE"]],
+    keywords: ["3 phase", "three phase", "mains", "400v", "supply", "ไฟ 3 เฟส", "สามเฟส"],
+    stamp: (c) => {
+      // a frozen instant of 325 V-peak phases (75°, −45°, 195°): distinct levels encode L1/L2/L3
+      c.V(c.n("L1"), c.n("N"), 314, 0.05);
+      c.V(c.n("L2"), c.n("N"), -230, 0.05);
+      c.V(c.n("L3"), c.n("N"), -84, 0.05);
+    },
+    post: () => ({ powered: true, on: true }),
+  },
+  {
+    type: "mcb3",
+    name: "Circuit breaker 3P",
+    category: "control",
+    description: "3-pole MCB. Click the handle to switch ON/OFF.",
+    w: 30.48,
+    h: 50.8,
+    h3: 45,
+    pins: [pin("L1", "1", 5.08, 2.54, "passive"), pin("L2", "3", 15.24, 2.54, "passive"), pin("L3", "5", 25.4, 2.54, "passive"), pin("T1", "2", 5.08, 48.26, "passive"), pin("T2", "4", 15.24, 48.26, "passive"), pin("T3", "6", 25.4, 48.26, "passive")],
+    props: [],
+    toggle: (i) => ({ off: !i.off }),
+    toggleLabel: (i) => (i.off ? "OFF" : "ON"),
+    switches: (_p, input) => (input.off ? [] : [["L1", "T1"], ["L2", "T2"], ["L3", "T3"]]),
+    keywords: ["breaker", "mcb", "circuit breaker", "เบรกเกอร์", "ตัดไฟ"],
+    post: (c) => ({ on: !c.input.off }),
+  },
+  {
+    type: "motor3",
+    name: "3-phase induction motor",
+    category: "control",
+    description: "M 3~ with terminals U1, V1, W1. Runs when all three phases are present; swapping two phases reverses it; a missing phase is flagged.",
+    w: 50.8,
+    h: 50.8,
+    h3: 45,
+    pins: [pin("U", "U1", 15.24, 48.26, "passive"), pin("V", "V1", 25.4, 48.26, "passive"), pin("W", "W1", 35.56, 48.26, "passive")],
+    props: [{ key: "rpm", label: "Rated speed", type: "number", default: 1450, min: 300, max: 3600, step: 10, unit: "rpm" }],
+    keywords: ["motor", "3 phase", "induction", "มอเตอร์", "มอเตอร์สามเฟส"],
+    stamp: (c) => {
+      c.R(c.n("U"), c.n("V"), 150);
+      c.R(c.n("V"), c.n("W"), 150);
+      c.R(c.n("W"), c.n("U"), 150);
+    },
+    post: (c) => {
+      const u = c.v(c.n("U"));
+      const v = c.v(c.n("V"));
+      const w = c.v(c.n("W"));
+      const Iu = Math.abs((u - v) / 150 + (u - w) / 150);
+      const Iv = Math.abs((v - u) / 150 + (v - w) / 150);
+      const Iw = Math.abs((w - u) / 150 + (w - v) / 150);
+      const all = Math.min(Iu, Iv, Iw) > 0.5;
+      const some = Math.max(Iu, Iv, Iw) > 0.5;
+      // L1→U, L2→V, L3→W (or any rotation of it) gives a positive product: forward
+      const dir = (u - v) * (v - w) * (w - u) > 0 ? 1 : -1;
+      const target = all ? dir : 0;
+      c.mem.speed = (c.mem.speed ?? 0) + (target - (c.mem.speed ?? 0)) * Math.min(1, c.dt * 1.5);
+      const sp = c.mem.speed;
+      return {
+        on: all,
+        speed: sp,
+        reading: Math.round(Math.abs(sp) * Number(c.props.rpm ?? 1450)) * Math.sign(sp || 1),
+        readingUnit: "rpm",
+        warn: !all && some ? "Single-phasing: one phase is missing — the motor hums and overheats" : undefined,
+      };
+    },
+  },
+  // ------------------------------------------------------------------ instruments
+  {
+    type: "multimeter",
+    name: "Digital multimeter",
+    category: "instrument",
+    description: "Measure DC volts, current (in series), resistance and continuity between the COM (black) and V/Ω/A (red) jacks. Click the dial to change mode.",
+    w: 40.64,
+    h: 76.2,
+    h3: 30,
+    pins: [pin("COM", "COM", 12.7, 71.12, "passive"), pin("VO", "VΩA", 27.94, 71.12, "passive")],
+    props: [],
+    toggle: (i) => ({ mode: (Number(i.mode ?? 0) + 1) % 4 }),
+    toggleLabel: (i) => ["DC volts", "DC amps", "Resistance Ω", "Continuity"][Number(i.mode ?? 0)],
+    keywords: ["multimeter", "meter", "voltmeter", "ammeter", "ohm", "มัลติมิเตอร์", "มิเตอร์", "วัดไฟ"],
+    stamp: (c) => {
+      const mode = Number(c.input.mode ?? 0);
+      if (mode === 0) c.R(c.n("VO"), c.n("COM"), 10e6);
+      else if (mode === 1) c.R(c.n("VO"), c.n("COM"), 0.1);
+      else c.V(c.n("VO"), c.n("COM"), 1, 1000);
+    },
+    post: (c) => {
+      const mode = Number(c.input.mode ?? 0);
+      const v = c.v(c.n("VO")) - c.v(c.n("COM"));
+      const fmt = (x: number, d: number) => (Math.abs(x) >= 1000 ? x.toFixed(0) : x.toFixed(d));
+      if (mode === 0) return { reading: v, readingUnit: "V", text: [fmt(v, Math.abs(v) < 10 ? 3 : 2), "V DC"] };
+      if (mode === 1) {
+        const a = v / 0.1;
+        return Math.abs(a) < 1 ? { reading: a * 1000, readingUnit: "mA", text: [fmt(a * 1000, 1), "mA DC"] } : { reading: a, readingUnit: "A", text: [fmt(a, 3), "A DC"] };
+      }
+      const r = v >= 0.999 || v < 0 ? Infinity : (1000 * v) / (1 - v);
+      const shown = !Number.isFinite(r) || r > 2e6 ? "OL" : r >= 1000 ? `${(r / 1000).toFixed(2)}k` : r.toFixed(1);
+      if (mode === 2) return { reading: Number.isFinite(r) ? r : 0, readingUnit: "Ω", text: [shown, "Ω"] };
+      const beep = Number.isFinite(r) && r < 30;
+      return { on: beep, indicator: beep, reading: Number.isFinite(r) ? r : 0, readingUnit: "Ω", text: [beep ? shown : "OL", "•)))"] };
+    },
   },
   // ------------------------------------------------------------------ prototyping
   {

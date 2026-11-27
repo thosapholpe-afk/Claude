@@ -214,9 +214,10 @@ export class CircuitSolver {
       const volts = d.dacV !== undefined ? d.dacV : d.pwm !== undefined ? (d.pwm > 0 ? board.logicV : 0) : d.level ? board.logicV : 0;
       const cur = (volts - V[n]) / GPIO_R;
       pinCurrent.set(pinId, cur);
-      if (Math.abs(cur) > 0.04) {
+      const maxA = board.pinMaxA ?? 0.04;
+      if (Math.abs(cur) > maxA) {
         const p = board.pins.find((x) => x.id === pinId);
-        diags.push({ level: "error", pin: pinId, msg: `${p?.label ?? pinId} ${cur > 0 ? "sources" : "sinks"} ${Math.abs(cur * 1000).toFixed(0)} mA (max 40 mA) — add a resistor or a driver` });
+        diags.push({ level: "error", pin: pinId, msg: `${p?.label ?? pinId} ${cur > 0 ? "sources" : "sinks"} ${Math.abs(cur * 1000).toFixed(0)} mA (max ${Math.round(maxA * 1000)} mA) — ${board.family === "plc" ? "use an interposing relay or contactor" : "add a resistor or a driver"}` });
       }
     }
     for (const p of board.pins) {

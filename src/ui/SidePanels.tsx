@@ -237,6 +237,7 @@ export function Inspector() {
           )}
         </label>
       ))}
+      {def.toggle && <ToggleButton id={inst.id} def={def} />}
       {def.pressable && running && (
         <button className="btn" onPointerDown={() => engine.setInput(inst.id, { pressed: true })} onPointerUp={() => engine.setInput(inst.id, { pressed: false })} onPointerLeave={() => engine.setInput(inst.id, { pressed: false })}>
           Hold to press
@@ -384,5 +385,17 @@ function HostSummary({ inst }: { inst: import("../core/types").PartInstance }) {
       )}
       {!used.parts.length && <p className="muted small">Drop parts so their pins land on the holes — or select the board and press Mount.</p>}
     </div>
+  );
+}
+
+/** Operate a latching control (selector, E-stop, breaker, meter dial) from the inspector. */
+function ToggleButton({ id, def }: { id: string; def: PartDef }) {
+  const snap = useStudio((s) => s.snap);
+  void snap; // re-render when the engine publishes
+  const input = engine.getInput(id);
+  return (
+    <button className="btn primary wide" onClick={() => engine.setInput(id, def.toggle!(engine.getInput(id)))}>
+      <RotateCw size={15} /> {def.toggleLabel ? def.toggleLabel(input) : "Operate"} · click to change
+    </button>
   );
 }

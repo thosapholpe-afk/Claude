@@ -83,6 +83,29 @@ function TrimPot({ x, y }: { x: number; y: number }) {
   );
 }
 
+/** Screw terminals with their IEC numbers. */
+function Terminals({ def }: { def: PartDef }) {
+  return (
+    <g>
+      {def.pins.map((p) => (
+        <g key={p.id}>
+          <circle cx={p.x} cy={p.y} r={1.25} fill="url(#tc-metal)" stroke="#5b636b" strokeWidth={0.2} />
+          <line x1={p.x - 0.8} y1={p.y} x2={p.x + 0.8} y2={p.y} stroke="#4b5157" strokeWidth={0.3} />
+          <text x={p.x} y={p.y < def.h / 2 ? p.y + 2.8 : p.y - 1.8} fontSize={1.15} textAnchor="middle" fill={def.category === "control" && !["supply3", "motor3"].includes(def.type) ? "#3a3d42" : "#e9ecef"} fontFamily="Chakra Petch" fontWeight={600}>
+            {p.label.split(" ")[0]}
+          </text>
+        </g>
+      ))}
+    </g>
+  );
+}
+
+function shadeHex(hex: string, amt: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v: number) => Math.max(0, Math.min(255, v + amt));
+  return `rgb(${c(n >> 16)},${c((n >> 8) & 255)},${c(n & 255)})`;
+}
+
 export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartInstance; def: PartDef; live?: PartLive; t: number }): ReactNode {
   const L = live ?? {};
   switch (def.type) {
@@ -596,6 +619,307 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           </g>
           <HeaderPins def={def} />
           <PinLabels def={def} side="left" />
+        </g>
+      );
+    }
+    case "pb-no":
+    case "pb-nc":
+    case "pilot-lamp": {
+      const lamp = def.type === "pilot-lamp";
+      const COL: Record<string, string> = { green: "#22b35a", red: "#e0352d", black: "#222", yellow: "#f2c419", blue: "#2c6fe0", white: "#f1f1ee", amber: "#ff9d1c" };
+      const col = COL[String(inst.props.color ?? (def.type === "pb-nc" ? "red" : "green"))] ?? "#22b35a";
+      const pressed = !!L.on && !lamp;
+      const lit = lamp && (L.brightness ?? 0) > 0.05;
+      return (
+        <g>
+          <rect x={0.4} y={0.9} width={22.86} height={21} rx={2.2} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          <rect width={22.86} height={21} rx={2.2} fill="#24262a" stroke="#3b3e44" strokeWidth={0.3} />
+          <circle cx={11.43} cy={10.5} r={9.4} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          {lit && <circle cx={11.43} cy={10.5} r={11} fill={col} opacity={0.6 * Math.min(1, L.brightness ?? 0)} filter="url(#tc-glow-lg)" />}
+          <circle cx={11.43} cy={10.5} r={pressed ? 6.9 : 7.6} fill={lamp && !lit ? shadeHex(col, -45) : col} stroke="rgba(0,0,0,.35)" strokeWidth={0.4} />
+          {lamp ? (
+            <g opacity={0.5} stroke="#fff" strokeWidth={0.25}>
+              {[-3, -1, 1, 3].map((d) => (
+                <line key={d} x1={11.43 + d} y1={5.2} x2={11.43 + d} y2={15.8} />
+              ))}
+            </g>
+          ) : (
+            <circle cx={9.6} cy={8.6} r={2.4} fill="#fff" opacity={pressed ? 0.08 : 0.22} />
+          )}
+          {!lamp && (
+            <text x={11.43} y={11.3} fontSize={2.2} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch" fontWeight={700} opacity={0.9}>
+              {String(inst.props.legend ?? "")}
+            </text>
+          )}
+          <text x={11.43} y={20.2} fontSize={1.3} textAnchor="middle" fill="#cfd3d8" fontFamily="Chakra Petch">
+            {lamp ? "24V" : def.type === "pb-no" ? "NO 3-4" : "NC 1-2"}
+          </text>
+          <Terminals def={def} />
+        </g>
+      );
+    }
+    case "estop": {
+      const latched = !!L.on;
+      return (
+        <g>
+          <rect x={0.4} y={0.9} width={27.94} height={26} rx={2} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          <rect width={27.94} height={26} rx={2} fill="#f2c419" stroke="#c9a10f" strokeWidth={0.3} />
+          <circle cx={13.97} cy={13} r={11.4} fill="#e8b80e" stroke="#b8920a" strokeWidth={0.3} />
+          <path id={`es-${inst.id}`} d="M 4.4 13 a 9.6 9.6 0 1 1 19.2 0" fill="none" />
+          <text fontSize={1.7} fill="#1b1b1b" fontFamily="Chakra Petch" fontWeight={700}>
+            <textPath href={`#es-${inst.id}`} startOffset="50%" textAnchor="middle">
+              EMERGENCY STOP
+            </textPath>
+          </text>
+          <circle cx={13.97} cy={13.6} r={latched ? 7.4 : 8.2} fill={latched ? "#a9201a" : "#e0352d"} stroke="#7d140f" strokeWidth={0.4} />
+          <circle cx={11.8} cy={11.4} r={2.8} fill="#fff" opacity={latched ? 0.06 : 0.2} />
+          {latched && (
+            <text x={13.97} y={14.4} fontSize={1.8} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch" fontWeight={700}>
+              LATCHED
+            </text>
+          )}
+          <Terminals def={def} />
+        </g>
+      );
+    }
+    case "selector2":
+    case "selector3": {
+      const three = def.type === "selector3";
+      const pos = Number(L.reading ?? 0);
+      const ang = three ? (pos === 1 ? -45 : pos === 2 ? 45 : 0) : pos ? 45 : -45;
+      const labels = three ? [[-45, String(inst.props.label1 ?? "MAN")], [0, String(inst.props.label0 ?? "OFF")], [45, String(inst.props.label2 ?? "AUTO")]] : [[-45, String(inst.props.label0 ?? "OFF")], [45, String(inst.props.label1 ?? "ON")]];
+      return (
+        <g>
+          <rect x={0.4} y={0.9} width={22.86} height={25} rx={2.2} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          <rect width={22.86} height={25} rx={2.2} fill="#24262a" stroke="#3b3e44" strokeWidth={0.3} />
+          {labels.map(([a, l]) => {
+            const r = ((Number(a) - 90) * Math.PI) / 180;
+            return (
+              <text key={String(a)} x={11.43 + Math.cos(r) * 9.4} y={13 + Math.sin(r) * 9.4 + 0.5} fontSize={1.5} textAnchor="middle" fill="#e9ecef" fontFamily="Chakra Petch" fontWeight={600}>
+                {l}
+              </text>
+            );
+          })}
+          <circle cx={11.43} cy={13} r={6.8} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <circle cx={11.43} cy={13} r={5.6} fill="#141518" />
+          <g transform={`rotate(${ang} 11.43 13)`}>
+            <rect x={10.03} y={7.6} width={2.8} height={10.8} rx={1.2} fill="#2e3035" stroke="#55585f" strokeWidth={0.25} />
+            <path d="M11.43 8.2 l-0.8 1.6 h1.6 z" fill="#f2f2f0" />
+          </g>
+          <Terminals def={def} />
+        </g>
+      );
+    }
+    case "limit-switch": {
+      const act = !!L.on;
+      return (
+        <g>
+          <rect x={4.4} y={12.9} width={22} height={18} rx={1.4} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          <rect x={4} y={12} width={22} height={18} rx={1.4} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <rect x={8} y={15} width={14} height={8} rx={0.8} fill="#d0a32a" />
+          <text x={15} y={20.2} fontSize={1.6} textAnchor="middle" fill="#1b1b1b" fontFamily="Chakra Petch" fontWeight={700}>
+            LIMIT
+          </text>
+          <g transform={`rotate(${act ? -28 : 0} 15 12)`}>
+            <rect x={14} y={2.6} width={2} height={10} rx={0.8} fill="#2b2d31" />
+            <circle cx={15} cy={2.6} r={2.4} fill="#1b1c1f" stroke="#55585f" strokeWidth={0.3} />
+          </g>
+          <circle cx={15} cy={12} r={1.6} fill="#55585f" />
+          <Terminals def={def} />
+        </g>
+      );
+    }
+    case "contactor":
+    case "overload":
+    case "timer-relay":
+    case "mcb3":
+    case "psu24": {
+      const on = !!L.on;
+      const W = def.w;
+      const H = def.h;
+      const body = def.type === "psu24" ? "#c9ced3" : def.type === "mcb3" ? "#f2f1ec" : "#e6e5e1";
+      return (
+        <g>
+          <rect x={0.4} y={0.9} width={W} height={H} rx={1.6} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          <rect width={W} height={H} rx={1.6} fill={def.type === "psu24" ? "url(#tc-metal)" : body} stroke="#a8a6a0" strokeWidth={0.3} />
+          {def.type === "contactor" && (
+            <g>
+              <rect x={6} y={14} width={W - 12} height={H - 28} rx={1.2} fill="#d3d1cb" />
+              <rect x={W / 2 - 7} y={24} width={14} height={18} rx={1} fill="#2a2c30" />
+              <rect x={W / 2 - 5} y={on ? 33 : 26} width={10} height={7} rx={0.6} fill={on ? "#22b35a" : "#8b8f96"} />
+              <text x={W / 2} y={50} fontSize={2.6} textAnchor="middle" fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700}>
+                {inst.label}
+              </text>
+              <text x={W / 2} y={54} fontSize={1.5} textAnchor="middle" fill="#55585f" fontFamily="Chakra Petch">
+                LC1D09 · 24VDC
+              </text>
+              <text x={W / 2} y={59} fontSize={1.5} textAnchor="middle" fill={on ? "#178a43" : "#8b8f96"} fontFamily="Chakra Petch" fontWeight={700}>
+                {on ? "▶ ENERGISED" : "○ released"}
+              </text>
+            </g>
+          )}
+          {def.type === "overload" && (
+            <g>
+              <circle cx={10} cy={20.32} r={4.2} fill="#2c6fe0" stroke="#1d4fa8" strokeWidth={0.3} />
+              <text x={10} y={21} fontSize={1.6} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch" fontWeight={700}>
+                {String(inst.props.setting ?? 8)}A
+              </text>
+              <rect x={20} y={15} width={9} height={4.4} rx={0.8} fill={on ? "#e0352d" : "#8b8f96"} />
+              <text x={24.5} y={18.2} fontSize={1.6} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch" fontWeight={700}>
+                {on ? "TRIP" : "OK"}
+              </text>
+              <rect x={32} y={15} width={9} height={4.4} rx={0.8} fill="#2a2c30" />
+              <text x={36.5} y={18.2} fontSize={1.3} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch">
+                TEST
+              </text>
+              <text x={W / 2} y={28} fontSize={2.2} textAnchor="middle" fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700}>
+                {inst.label} · OL
+              </text>
+            </g>
+          )}
+          {def.type === "timer-relay" && (
+            <g>
+              <IndicatorLed x={W / 2 - 4} y={12} on={!!L.indicator} color="#33ff88" />
+              <IndicatorLed x={W / 2 + 4} y={12} on={on} color="#ffb020" />
+              <circle cx={W / 2} cy={30} r={7} fill="#2a2c30" stroke="#55585f" strokeWidth={0.3} />
+              <circle cx={W / 2} cy={30} r={7} fill="none" stroke="#22b35a" strokeWidth={1.2} strokeDasharray={`${Math.min(1, Number(L.reading ?? 0) / Number(inst.props.delay ?? 3)) * 44} 44`} transform={`rotate(-90 ${W / 2} 30)`} />
+              <text x={W / 2} y={31} fontSize={2.2} textAnchor="middle" fill="#fff" fontFamily="IBM Plex Mono" fontWeight={600}>
+                {Number(inst.props.delay ?? 3)}s
+              </text>
+              <text x={W / 2} y={44} fontSize={1.8} textAnchor="middle" fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700}>
+                {inst.label}
+              </text>
+              <text x={W / 2} y={48} fontSize={1.3} textAnchor="middle" fill="#55585f" fontFamily="Chakra Petch">
+                ON-DELAY
+              </text>
+            </g>
+          )}
+          {def.type === "mcb3" && (
+            <g>
+              {[5.08, 15.24, 25.4].map((x) => (
+                <g key={x}>
+                  <rect x={x - 3.6} y={16} width={7.2} height={16} rx={0.8} fill="#d7d5cf" />
+                  <rect x={x - 2.4} y={on ? 17.5 : 24} width={4.8} height={7} rx={0.8} fill={on ? "#2b2d31" : "#55585f"} />
+                </g>
+              ))}
+              <text x={15.24} y={38} fontSize={2.2} textAnchor="middle" fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700}>
+                C16 · {on ? "ON  I" : "OFF O"}
+              </text>
+              <rect x={11} y={40} width={8.5} height={2.8} rx={0.5} fill={on ? "#e0352d" : "#22b35a"} />
+            </g>
+          )}
+          {def.type === "psu24" && (
+            <g>
+              <rect x={4} y={9} width={W - 8} height={30} rx={1} fill="url(#tc-mesh)" opacity={0.55} />
+              <rect x={6} y={41} width={W - 12} height={9} rx={0.8} fill="#2a2c30" />
+              <text x={W / 2} y={46.6} fontSize={2.6} textAnchor="middle" fill="#f2f2f0" fontFamily="Chakra Petch" fontWeight={700}>
+                24V DC 2.5A
+              </text>
+              <IndicatorLed x={W - 6} y={6} on={on} color="#33ff88" />
+            </g>
+          )}
+          <Terminals def={def} />
+        </g>
+      );
+    }
+    case "supply3": {
+      const COL: Record<string, string> = { L1: "#7b4a24", L2: "#1b1b1b", L3: "#8a8a8a", N: "#2c6fe0", PE: "#22b35a" };
+      return (
+        <g>
+          <rect x={0.4} y={0.9} width={45.72} height={15} rx={1.4} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          <rect width={45.72} height={15} rx={1.4} fill="#2a2c30" stroke="#45484f" strokeWidth={0.3} />
+          <text x={22.86} y={4.4} fontSize={2} textAnchor="middle" fill="#ffd23f" fontFamily="Chakra Petch" fontWeight={700}>
+            ⚡ 3~ 400/230 V 50 Hz
+          </text>
+          {def.pins.map((p) => (
+            <g key={p.id}>
+              <rect x={p.x - 3} y={7} width={6} height={7} rx={0.6} fill={COL[p.id]} stroke={p.id === "PE" ? "#f2c419" : "rgba(255,255,255,.2)"} strokeWidth={p.id === "PE" ? 0.6 : 0.2} strokeDasharray={p.id === "PE" ? "1 1" : undefined} />
+              <text x={p.x} y={11.6} fontSize={1.6} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch" fontWeight={700}>
+                {p.id}
+              </text>
+            </g>
+          ))}
+          <Terminals def={def} />
+        </g>
+      );
+    }
+    case "motor3": {
+      const sp = L.speed ?? 0;
+      const rot = (t * 360 * 3 * sp) % 360;
+      return (
+        <g>
+          <circle cx={25.4} cy={22} r={21} fill="#000" opacity={0.3} filter="url(#tc-soft)" transform="translate(0.5 0.9)" />
+          <circle cx={25.4} cy={22} r={21} fill="#4f6b8a" stroke="#34495f" strokeWidth={0.4} />
+          {Array.from({ length: 18 }, (_, i) => {
+            const a = (i / 18) * Math.PI * 2;
+            return <line key={i} x1={25.4 + Math.cos(a) * 15} y1={22 + Math.sin(a) * 15} x2={25.4 + Math.cos(a) * 20.4} y2={22 + Math.sin(a) * 20.4} stroke="#3c5470" strokeWidth={1} />;
+          })}
+          <circle cx={25.4} cy={22} r={14.4} fill="#5b7899" />
+          <g transform={`rotate(${rot} 25.4 22)`}>
+            {[0, 60, 120, 180, 240, 300].map((a) => (
+              <path key={a} transform={`rotate(${a} 25.4 22)`} d="M25.4 22 L 24.2 9.5 Q 25.4 8.4 26.6 9.5 Z" fill="#c9d4e0" opacity={0.9} />
+            ))}
+            <circle cx={25.4} cy={22} r={3} fill="#2a2c30" />
+          </g>
+          <text x={25.4} y={38.6} fontSize={3} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch" fontWeight={700}>
+            M 3~
+          </text>
+          {L.on && (
+            <text x={25.4} y={5.4} fontSize={2} textAnchor="middle" fill="#bcd9a2" fontFamily="IBM Plex Mono" fontWeight={600}>
+              {sp > 0 ? "⟳ FWD" : "⟲ REV"} {Math.abs(Math.round(Number(L.reading ?? 0)))} rpm
+            </text>
+          )}
+          {L.warn && (
+            <text x={25.4} y={5.4} fontSize={2} textAnchor="middle" fill="#ff8a7a" fontFamily="Chakra Petch" fontWeight={700}>
+              ⚠ MISSING PHASE
+            </text>
+          )}
+          <rect x={11} y={44} width={28.8} height={6.6} rx={0.8} fill="#2a2c30" />
+          <Terminals def={def} />
+        </g>
+      );
+    }
+    case "multimeter": {
+      const text = L.text ?? ["0.000", "V DC"];
+      const mode = ["V DC", "mA DC", "A DC", "Ω", "•)))"].indexOf(text[1] ?? "");
+      const ang = [-60, -20, -20, 20, 60][Math.max(0, mode)];
+      return (
+        <g>
+          <rect x={0.4} y={1} width={40.64} height={76.2} rx={4} fill="#000" opacity={0.35} filter="url(#tc-soft)" />
+          <rect width={40.64} height={76.2} rx={4} fill="#f2c419" stroke="#c9a10f" strokeWidth={0.4} />
+          <rect x={3} y={3} width={34.64} height={70.2} rx={3} fill="#2a2c30" />
+          <rect x={6} y={6} width={28.64} height={16} rx={1.2} fill="#b8c9a5" />
+          <text x={32.6} y={17.6} fontSize={8} textAnchor="end" fill="#1d2a14" fontFamily="IBM Plex Mono" fontWeight={600}>
+            {text[0]}
+          </text>
+          <text x={8} y={10.4} fontSize={2.2} fill="#1d2a14" fontFamily="IBM Plex Mono" fontWeight={600}>
+            {text[1]}
+          </text>
+          {L.indicator && <circle cx={31.6} cy={9} r={1.2} fill="#e0352d" />}
+          {["V", "A", "Ω", "•)))"].map((l, i) => {
+            const a = ((-60 + i * 40 - 90) * Math.PI) / 180;
+            return (
+              <text key={l} x={20.32 + Math.cos(a) * 13} y={42 + Math.sin(a) * 13 + 0.6} fontSize={2} textAnchor="middle" fill="#f2f2f0" fontFamily="Chakra Petch" fontWeight={700}>
+                {l}
+              </text>
+            );
+          })}
+          <circle cx={20.32} cy={42} r={9.4} fill="#141518" stroke="#55585f" strokeWidth={0.4} />
+          <g transform={`rotate(${ang} 20.32 42)`}>
+            <rect x={18.8} y={33.2} width={3} height={17.6} rx={1.4} fill="#3a3d44" />
+            <path d="M20.32 33.8 l-1 2 h2 z" fill="#f2c419" />
+          </g>
+          <circle cx={12.7} cy={64} r={3.2} fill="#141518" stroke="#55585f" strokeWidth={0.3} />
+          <circle cx={27.94} cy={64} r={3.2} fill="#141518" stroke="#e0352d" strokeWidth={0.6} />
+          <text x={12.7} y={59.4} fontSize={1.6} textAnchor="middle" fill="#cfd3d8" fontFamily="Chakra Petch">
+            COM
+          </text>
+          <text x={27.94} y={59.4} fontSize={1.6} textAnchor="middle" fill="#cfd3d8" fontFamily="Chakra Petch">
+            VΩmA
+          </text>
+          <line x1={12.7} y1={64} x2={12.7} y2={71.12} stroke="#1b1b1b" strokeWidth={1.2} />
+          <line x1={27.94} y1={64} x2={27.94} y2={71.12} stroke="#d6302a" strokeWidth={1.2} />
+          <HeaderPins def={def} />
         </g>
       );
     }

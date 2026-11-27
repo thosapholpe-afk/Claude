@@ -3,13 +3,20 @@ import { getBoard, builtinLedId, builtinLedLit } from "../core/boards";
 import { BOARD_ID, endpointPos, footprintOf, instBounds, isBoard, isHost, pinWorld } from "../core/circuit";
 import { getPart } from "../core/parts";
 import { engine } from "../core/sim";
-import type { PartInstance, Wire } from "../core/types";
+import type { BoardDef, PartInstance, Wire } from "../core/types";
 import { snap } from "../core/wiring";
 import { useStudio } from "../store";
 import { Board2D, SvgDefs } from "./render/Board2D";
 import { Part2D } from "./render/Parts2D";
 
-const ANIMATED = new Set(["buzzer", "led", "water", "mq2", "mq135", "dc-motor", "rain", "pulse", "touch"]);
+/** Which PLC terminals are energised (above half the 24 V logic level). */
+function plcIo(board: BoardDef, pinV: Record<string, number> | undefined) {
+  const out: Record<string, boolean> = {};
+  for (const p of board.pins) if (/^[XY]\d$/.test(p.label)) out[p.label] = (pinV?.[p.id] ?? 0) > board.logicV / 2;
+  return out;
+}
+
+const ANIMATED = new Set(["buzzer", "led", "water", "mq2", "mq135", "dc-motor", "rain", "pulse", "touch", "motor3"]);
 
 interface View {
   tx: number;
@@ -196,7 +203,13 @@ export function Canvas() {
   const onPointerDownPart = (e: React.PointerEvent, inst: PartInstance) => {
     e.stopPropagation();
     const st = useStudio.getState();
-    if (running && getPart(inst.type)?.pressable) {
+    const pdef = getPart(inst.type);
+    if (running && pdef?.toggle) {
+      engine.setInput(inst.id, pdef.toggle(engine.getInput(inst.id)));
+      st.select([inst.id]);
+      return;
+    }
+    if (running && pdef?.pressable) {
       engine.setInput(inst.id, { pressed: true });
       (e.target as Element).setPointerCapture?.(e.pointerId);
       const up = () => {
@@ -398,7 +411,7 @@ export function Canvas() {
               <g key={inst.id} data-id={inst.id} className={`part ${sel ? "is-selected" : ""}`} onPointerDown={(e) => onPointerDownPart(e, inst)}>
                 <g transform={`translate(${inst.x} ${inst.y}) rotate(${inst.rot} ${cx} ${cy})`}>
                   {isBoard(inst) ? (
-                    <Board2D board={board} powered={running} ledOn={ledOn} />
+                    <Board2D board={board} powered={running} ledOn={ledOn} io={board.family === "plc" ? plcIo(board, snapState?.pinV) : undefined} />
                   ) : def ? (
                     <Part2D inst={inst} def={def} live={live} t={ANIMATED.has(def.type) || live?.burnt ? t : 0} />
                   ) : null}

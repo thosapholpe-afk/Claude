@@ -11,6 +11,7 @@ import { getBoard } from "../core/boards";
 import { isHost } from "../core/circuit";
 import { engine, type MqttMessage } from "../core/sim";
 import { templateFor } from "../core/templates";
+import { serialiseLadder, startStopProgram } from "../core/plc";
 import type { Lang } from "../core/types";
 import { useStudio, type DockTab } from "../store";
 import { Plotter } from "./Plotter";
@@ -35,7 +36,7 @@ const theme = EditorView.theme({
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection": { backgroundColor: "var(--select) !important" },
 });
 
-const LANG_LABEL: Record<Lang, string> = { arduino: "Arduino C++", micropython: "MicroPython", python: "Python 3" };
+const LANG_LABEL: Record<Lang, string> = { arduino: "Arduino C++", micropython: "MicroPython", python: "Python 3", ladder: "Ladder" };
 
 const STARTER: Record<Lang, string> = {
   arduino: `void setup() {
@@ -60,6 +61,7 @@ while True:
     print("Hello from Thosaphol Connect")
     sleep(1)
 `,
+  ladder: serialiseLadder(startStopProgram()),
 };
 
 function CodePane() {

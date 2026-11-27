@@ -1,6 +1,6 @@
 // Core data model for Thosaphol Connect. All geometry is in millimetres.
 
-export type Lang = "arduino" | "micropython" | "python";
+export type Lang = "arduino" | "micropython" | "python" | "ladder";
 
 export type Cap =
   | "digital"
@@ -101,7 +101,7 @@ export interface BoardDef {
   short: string;
   vendor: string;
   mcu: string;
-  family: "esp32" | "esp8266" | "avr" | "rp2040" | "bcm2711";
+  family: "esp32" | "esp8266" | "avr" | "rp2040" | "bcm2711" | "plc";
   width: number;
   height: number;
   thickness: number;
@@ -131,6 +131,8 @@ export interface BoardDef {
   wifi?: boolean;
   /** The built-in LED lights when its pin is LOW (ESP8266 boards). */
   builtinActiveLow?: boolean;
+  /** Max current per output pin in A (default 0.04; PLC transistor outputs 0.5). */
+  pinMaxA?: number;
 }
 
 export type PinRole =
@@ -180,7 +182,9 @@ export type PartCategory =
   | "display"
   | "passive"
   | "prototyping"
-  | "custom";
+  | "custom"
+  | "control"
+  | "instrument";
 
 export type EnvKey =
   | "temperature"

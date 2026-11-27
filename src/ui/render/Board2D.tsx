@@ -118,14 +118,18 @@ export const Board2D = memo(function Board2D({
   ledOn,
   showLabels = true,
   silk = false,
+  io,
 }: {
   board: BoardDef;
   powered: boolean;
   ledOn: boolean;
+  /** PLC: which X/Y terminals are on (for the status LEDs). */
+  io?: Record<string, boolean>;
   showLabels?: boolean;
   /** Top-surface texture for 3D: PCB, copper and silkscreen only, mounting holes cut out. */
   silk?: boolean;
 }) {
+  if (board.family === "plc") return <PlcFace board={board} powered={powered} io={io ?? {}} showLabels={showLabels} />;
   const W = board.width;
   const H = board.height;
   const look = boardLook(board);
@@ -232,6 +236,72 @@ export const Board2D = memo(function Board2D({
     </g>
   );
 });
+
+/** Compact PLC: grey housing, two rows of screw terminals, I/O status LEDs. */
+function PlcFace({ board, powered, io, showLabels }: { board: BoardDef; powered: boolean; io: Record<string, boolean>; showLabels: boolean }) {
+  const W = board.width;
+  const H = board.height;
+  const led = (x: number, y: number, on: boolean, color = "#3bff7a") => (
+    <g>
+      {on && <circle cx={x} cy={y} r={2.2} fill={color} opacity={0.55} filter="url(#tc-glow)" />}
+      <rect x={x - 0.9} y={y - 0.6} width={1.8} height={1.2} rx={0.25} fill={on ? color : "#4a4d52"} />
+    </g>
+  );
+  const tops = board.pins.filter((p) => p.y < H / 2);
+  const bots = board.pins.filter((p) => p.y >= H / 2);
+  return (
+    <g>
+      <rect x={0.8} y={1.6} width={W} height={H} rx={2.4} fill="#000" opacity={0.35} filter="url(#tc-soft)" />
+      <rect width={W} height={H} rx={2.4} fill="#dedcd6" stroke="#b4b1aa" strokeWidth={0.4} />
+      <rect x={2} y={0.8} width={W - 4} height={10.6} rx={1.2} fill="#2c2e33" />
+      <rect x={2} y={H - 11.4} width={W - 4} height={10.6} rx={1.2} fill="#2c2e33" />
+      {[...tops, ...bots].map((p) => (
+        <g key={p.id}>
+          <rect x={p.x - 3.4} y={p.y - 3.4} width={6.8} height={6.8} rx={0.6} fill="#1b1c1f" />
+          <circle cx={p.x} cy={p.y} r={2.4} fill="url(#tc-metal)" stroke="#5b636b" strokeWidth={0.25} />
+          <path d={`M${p.x - 1.5} ${p.y - 1.5} L${p.x + 1.5} ${p.y + 1.5} M${p.x + 1.5} ${p.y - 1.5} L${p.x - 1.5} ${p.y + 1.5}`} stroke="#4b5157" strokeWidth={0.35} />
+          {showLabels && (
+            <text x={p.x} y={p.y < H / 2 ? p.y + 7.4 : p.y - 5.6} fontSize={2} textAnchor="middle" fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700}>
+              {p.label}
+            </text>
+          )}
+        </g>
+      ))}
+      <rect x={6} y={22} width={W - 12} height={44} rx={1.6} fill="#ecebe7" stroke="#c9c6bf" strokeWidth={0.3} />
+      <text x={10} y={31} fontSize={4.4} fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700} letterSpacing={0.3}>
+        TC-PLC 16MT
+      </text>
+      <text x={10} y={35.6} fontSize={1.9} fill="#6b6e75" fontFamily="Chakra Petch">
+        8 IN · 8 OUT (SOURCE) · 24 VDC · LADDER
+      </text>
+      <g fontFamily="IBM Plex Mono, monospace" fontSize={1.7} fill="#4b4e55">
+        <text x={10} y={45.4}>IN</text>
+        <text x={10} y={55.4}>OUT</text>
+        {Array.from({ length: 8 }, (_, i) => (
+          <g key={i}>
+            <text x={22 + i * 7} y={42.4} textAnchor="middle">
+              {i}
+            </text>
+            {led(22 + i * 7, 45, !!io[`X${i}`])}
+            {led(22 + i * 7, 55, !!io[`Y${i}`], "#ffb020")}
+          </g>
+        ))}
+      </g>
+      <g fontFamily="Chakra Petch" fontSize={1.8} fill="#4b4e55" fontWeight={600}>
+        <text x={86} y={45.6}>POWER</text>
+        <text x={86} y={50.6}>RUN</text>
+        <text x={86} y={55.6}>ERR</text>
+      </g>
+      {led(82.6, 45, powered)}
+      {led(82.6, 50, powered)}
+      {led(82.6, 55, false, "#ff3b30")}
+      <rect x={W - 20} y={58} width={12} height={4.6} rx={0.8} fill="#2c2e33" />
+      <text x={W - 14} y={61.4} fontSize={1.7} textAnchor="middle" fill="#e9ecef" fontFamily="Chakra Petch" fontWeight={700}>
+        {powered ? "RUN" : "STOP"}
+      </text>
+    </g>
+  );
+}
 
 function StatusLed({ x, y, color, on, label }: { x: number; y: number; color: string; on: boolean; label: string }) {
   return (

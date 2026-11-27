@@ -4,7 +4,7 @@ import { BOARD_ID, buildTopology, instBounds, isBoard, isHost } from "./core/cir
 import { defaultScenarioState } from "./core/env";
 import { customSensorToPart, getPart, registerPart } from "./core/parts";
 import { engine, type SerialLine, type SimSnapshot } from "./core/sim";
-import { BOARD_ORIGIN, instantiateTemplate, templateFor } from "./core/templates";
+import { BOARD_ORIGIN, instantiateTemplate, templateFor, templateSupports } from "./core/templates";
 import type { CaseParams, CustomSensorDef, Lang, MqttConfig, PartInstance, Project, ScenarioState, Wire } from "./core/types";
 import { labelPrefix, newId, nextLabel, routeWire, snap } from "./core/wiring";
 import { planMount } from "./core/mount";
@@ -121,6 +121,8 @@ interface State {
   duplicateSelection(): void;
   setProp(id: string, key: string, value: number | string | boolean): void;
   mountBoard(kind: "breadboard" | "perfboard"): void;
+  /** Switch between microcontroller and PLC workspaces (loads a starter circuit). */
+  setMode(mode: "mcu" | "plc"): void;
   setLabel(id: string, label: string): void;
   addWire(w: Omit<Wire, "id" | "points" | "color"> & { color?: string }): void;
   tidyWires(ids?: string[]): void;
@@ -273,6 +275,12 @@ export const useStudio = create<State>((set, get) => ({
     if (spec?.live && get().sim.running) engine.setInput(id, { [key]: value as number });
     get().commit((p) => ({ ...p, parts: p.parts.map((q) => (q.id === id ? { ...q, props: { ...q.props, [key]: value } } : q)) }), !spec?.live);
   },
+  setMode: (mode) => {
+    const isPlcNow = getBoard(get().project.boardId).family === "plc";
+    if ((mode === "plc") === isPlcNow) return;
+    get().loadTemplate(mode === "plc" ? "plc-start-stop" : "blink");
+    setTimeout(() => window.dispatchEvent(new Event("tconnect:fit")), 60);
+  },
   mountBoard: (kind) => {
     const st = get();
     let boardInst = st.project.parts.find(isBoard);
@@ -362,7 +370,7 @@ export const useStudio = create<State>((set, get) => ({
     const t = templateFor(id);
     if (!t) return [];
     const cur = get().project;
-    const boardId = t.boards && !t.boards.includes(cur.boardId) ? t.boards[0] : cur.boardId;
+    const boardId = templateSupports(t, cur.boardId) ? cur.boardId : t.boards?.[0] ?? "esp32-devkit-v1";
     const inst = instantiateTemplate(t, boardId, cur.lang);
     void get().stopSim();
     get().commit((p) => ({ ...p, boardId, name: t.name, parts: inst.parts, wires: inst.wires, lang: inst.lang, code: inst.code, scenario: inst.scenario, envOverrides: {} }));

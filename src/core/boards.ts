@@ -930,6 +930,75 @@ function nodemcu(): BoardDef {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Compact PLC, 8 × 24 V inputs / 8 × 24 V source (transistor) outputs, FX-style addresses.
+// ---------------------------------------------------------------------------
+function plc(): BoardDef {
+  const W = 120;
+  const H = 90;
+  const pitch = 3 * P; // screw-terminal pitch 7.62 mm
+  const pins: BoardPin[] = [];
+  const top = ["24V", "0V", "S/S", ...Array.from({ length: 8 }, (_, i) => `X${i}`)];
+  const bottom = ["0V", "COM", ...Array.from({ length: 8 }, (_, i) => `Y${i}`)];
+  const x0t = Math.round((W - (top.length - 1) * pitch) / 2 / P) * P;
+  const x0b = Math.round((W - (bottom.length - 1) * pitch) / 2 / P) * P;
+  const yT = 2 * P;
+  const yB = H - 2 * P;
+  top.forEach((l, i) => {
+    const x = x0t + i * pitch;
+    if (l === "24V") pins.push(powerPin("p24", "24V", x, yT, 24, ["24V", "L+", "+24V"]));
+    else if (l === "0V") pins.push(powerPin("p0v", "0V", x, yT, 0, ["0V", "M", "GND"]));
+    else if (l === "S/S") pins.push(ctrlPin("ss", "S/S", x, yT, ["S/S"]));
+    else {
+      const n = Number(l.slice(1));
+      pins.push(gpioPin(`x${n}`, l, x, yT, n, ["digital"], [l, `X00${n}`, `I0.${n}`, `%IX0.${n}`], { inputOnly: true }));
+    }
+  });
+  bottom.forEach((l, i) => {
+    const x = x0b + i * pitch;
+    if (l === "0V") pins.push(powerPin("p0v_b", "0V", x, yB, 0, ["0V", "GND"]));
+    else if (l === "COM") pins.push(powerPin("com", "COM", x, yB, 0, ["COM"]));
+    else {
+      const n = Number(l.slice(1));
+      pins.push(gpioPin(`y${n}`, l, x, yB, 100 + n, ["digital"], [l, `Y00${n}`, `Q0.${n}`, `%QX0.${n}`]));
+    }
+  });
+  return {
+    id: "plc-fx16",
+    name: "PLC 16 I/O (8 in / 8 out, 24 V)",
+    short: "PLC",
+    vendor: "Generic FX-style",
+    mcu: "Ladder logic CPU, 10 ms scan",
+    family: "plc",
+    headers: "female-up",
+    width: W,
+    height: H,
+    thickness: 1.6,
+    logicV: 24,
+    adcBits: 0,
+    adcVref: 24,
+    intBits: 32,
+    pinMaxA: 0.5,
+    pcbColor: "#dedcd6",
+    silkColor: "#2b2d31",
+    pins,
+    holes: [],
+    connectors: [],
+    chips: [],
+    languages: ["ladder"],
+    defaultLang: "ladder",
+    constants: {},
+    i2c: { sda: "x0", scl: "x1" },
+    notes: [
+      "Inputs X0–X7 switch at 24 V (sinking: wire a contact from 24V to the input).",
+      "Outputs Y0–Y7 source 24 V up to 0.5 A — lamps and contactor coils go from Y to 0V.",
+      "The 24V / 0V terminals are the built-in service supply for sensors and pushbuttons.",
+    ],
+    maxComponentZ: 0,
+    look: { title: "TC-PLC 16MT", tx: 8, ty: 46, size: 4, spacing: 0.3, leds: [] },
+  };
+}
+
 /** Header style, with the original boards' defaults. */
 export function boardHeaders(b: BoardDef): HeaderStyle {
   return b.headers ?? (b.family === "avr" ? "female-up" : b.family === "bcm2711" ? "male-up" : "male-down");
@@ -955,7 +1024,8 @@ export const builtinLedId = (b: BoardDef) => b.builtinLed ?? (b.family === "rp20
 /** Whether the on-board LED is lit for a driven pin level. */
 export const builtinLedLit = (b: BoardDef, drive: { level?: number } | undefined) => (drive ? (b.builtinActiveLow ? drive.level === 0 : !!drive.level) : false);
 
-export const BOARDS: BoardDef[] = [esp32(), esp32s3(), nodemcu(), uno(), nano(), mega(), pico(), pico(true), pi4()];
+export const BOARDS: BoardDef[] = [esp32(), esp32s3(), nodemcu(), uno(), nano(), mega(), pico(), pico(true), pi4(), plc()];
+export const isPlc = (b: BoardDef) => b.family === "plc";
 
 const byId = new Map(BOARDS.map((b) => [b.id, b]));
 const customBoards = new Map<string, BoardDef>();
