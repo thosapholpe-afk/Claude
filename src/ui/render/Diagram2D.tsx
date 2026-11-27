@@ -9,6 +9,7 @@ import type { BoardDef, PartInstance } from "../../core/types";
 const STROKE = "var(--dg-stroke)";
 
 function Sym({ type, live, w, h }: { type: string; live?: PartLive; w: number; h: number }) {
+  const def2 = type;
   const cx = w / 2;
   const cy = h / 2;
   const s = Math.min(w, h);
@@ -80,6 +81,60 @@ function Sym({ type, live, w, h }: { type: string; live?: PartLive; w: number; h
           <text x={cx} y={cy + k * 0.15} fontSize={k * 0.38} textAnchor="middle" fill={STROKE} stroke="none" fontFamily="Chakra Petch" fontWeight={700}>
             {type === "mcb3" ? "Q" : "F"}
           </text>
+        </g>
+      );
+    case "cylinder": {
+      // ISO 1219 double-acting cylinder: barrel, piston at its live position, rod
+      const bw = w * 0.62;
+      const bh = Math.min(h * 0.32, 6);
+      const x0 = w * 0.08;
+      const y0 = cy - bh / 2;
+      const px = x0 + 0.6 + (live?.pos ?? 0) * (bw - 1.8);
+      return (
+        <g {...common} stroke={live?.on ? "var(--dg-live)" : STROKE}>
+          <rect x={x0} y={y0} width={bw} height={bh} />
+          <path d={`M ${px} ${y0} v ${bh}`} strokeWidth={0.7} />
+          <path d={`M ${px} ${cy} H ${x0 + bw + (live?.pos ?? 0) * w * 0.25 + 1}`} strokeWidth={0.6} />
+        </g>
+      );
+    }
+    case "valve52":
+    case "valve52d": {
+      // two squares; the active one carries the flow arrows; solenoid box(es) and spring
+      const sq = Math.min(h * 0.42, 7.5);
+      const x0 = cx - sq;
+      const y0 = cy - sq / 2;
+      const shifted = !!live?.on;
+      const arrows = (x: number, cross: boolean) =>
+        cross ? (
+          <path d={`M ${x + sq * 0.25} ${y0 + sq} L ${x + sq * 0.75} ${y0} M ${x + sq * 0.75} ${y0 + sq} L ${x + sq * 0.25} ${y0}`} />
+        ) : (
+          <path d={`M ${x + sq * 0.25} ${y0 + sq} V ${y0} M ${x + sq * 0.75} ${y0} V ${y0 + sq}`} />
+        );
+      return (
+        <g {...common}>
+          <rect x={x0} y={y0} width={sq} height={sq} stroke={shifted ? "var(--dg-live)" : STROKE} />
+          <rect x={x0 + sq} y={y0} width={sq} height={sq} stroke={!shifted ? "var(--dg-live)" : STROKE} />
+          <g stroke={shifted ? "var(--dg-live)" : STROKE}>{arrows(x0, false)}</g>
+          <g stroke={!shifted ? "var(--dg-live)" : STROKE}>{arrows(x0 + sq, true)}</g>
+          <rect x={x0 - sq * 0.4} y={y0 + sq * 0.25} width={sq * 0.4} height={sq * 0.5} />
+          <path d={`M ${x0 - sq * 0.4} ${y0 + sq * 0.75} l ${sq * 0.4} ${-sq * 0.5}`} />
+          {def2 === "valve52d" ? (
+            <>
+              <rect x={x0 + sq * 2} y={y0 + sq * 0.25} width={sq * 0.4} height={sq * 0.5} />
+              <path d={`M ${x0 + sq * 2.4} ${y0 + sq * 0.75} l ${-sq * 0.4} ${-sq * 0.5}`} />
+            </>
+          ) : (
+            <path d={`M ${x0 + sq * 2} ${cy} l ${sq * 0.1} -${sq * 0.2} l ${sq * 0.1} ${sq * 0.4} l ${sq * 0.1} -${sq * 0.4} l ${sq * 0.1} ${sq * 0.4}`} />
+          )}
+        </g>
+      );
+    }
+    case "air-supply":
+      return (
+        <g {...common} stroke={live?.on !== false ? "var(--dg-live)" : STROKE}>
+          <circle cx={cx} cy={cy} r={k * 0.6} />
+          <path d={`M ${cx} ${cy - k * 0.32} l ${k * 0.28} ${k * 0.45} h ${-k * 0.56} Z`} fill={live?.on !== false ? "var(--dg-live)" : STROKE} />
         </g>
       );
     case "psu24":

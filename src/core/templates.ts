@@ -1,6 +1,6 @@
 import { BOARDS, getBoard } from "./boards";
-import { forwardReverseProgram, rung, selectorTimerProgram, serialiseLadder, startStopProgram } from "./plc";
-import { BOARD_ID, endpointPos } from "./circuit";
+import { forwardReverseProgram, pneumaticCycleProgram, rung, selectorTimerProgram, serialiseLadder, startStopProgram } from "./plc";
+import { BOARD_ID, endpointPos, pinRoleOf } from "./circuit";
 import { defaultScenarioState } from "./env";
 import { getPart } from "./parts";
 import { choosePin, choosePowerPin, chooseGnd, newId, WIRE_COLORS } from "./wiring";
@@ -1163,6 +1163,40 @@ while True:
     code: { ladder: () => serialiseLadder(selectorTimerProgram()) },
   },
   {
+    id: "plc-pneumatic",
+    name: "PLC: air cylinder, 5/2 valve auto-cycle",
+    thai: "PLC กระบอกลม + โซลินอยด์วาล์ว 5/2 วิ่งเข้า-ออกอัตโนมัติ",
+    description: "START makes a double-acting cylinder extend and retract continuously between its reed switches a0/a1 (0.5 s dwell at the end); STOP sends it home and halts. 5/2 spring-return valve on Y0, stroke counter C0.",
+    icon: "factory",
+    boards: ["plc-fx16"],
+    parts: [
+      { id: "S1", type: "pb-no", label: "S1", dx: 38.1, dy: -40.64, props: { color: "green", legend: "START" } },
+      { id: "S2", type: "pb-nc", label: "S2", dx: 66.04, dy: -40.64, props: { color: "red", legend: "STOP" } },
+      { id: "H1", type: "pilot-lamp", label: "H1", dx: 38.1, dy: 109.22, props: { color: "green" } },
+      { id: "CYL1", type: "cylinder", label: "CYL1", dx: 147.32, dy: -45.72 },
+      { id: "YV1", type: "valve52", label: "YV1", dx: 152.4, dy: 12.7 },
+      { id: "AIR", type: "air-supply", label: "AIR", dx: 160.02, dy: 63.5 },
+    ],
+    wiring: [
+      ["S1.3", "board.p24"],
+      ["S1.4", "board.x0"],
+      ["S2.1", "board.p24"],
+      ["S2.2", "board.x1"],
+      ["CYL1.a0p", "board.p24"],
+      ["CYL1.a0", "board.x2"],
+      ["CYL1.a1p", "board.p24"],
+      ["CYL1.a1", "board.x3"],
+      ["YV1.A1", "board.y0"],
+      ["YV1.A2", "board.com"],
+      ["H1.X1", "board.y1"],
+      ["H1.X2", "board.p0v_b"],
+      ["AIR.P", "YV1.1"],
+      ["YV1.4", "CYL1.A"],
+      ["YV1.2", "CYL1.B"],
+    ],
+    code: { ladder: () => serialiseLadder(pneumaticCycleProgram()) },
+  },
+  {
     id: "relay-start-stop",
     name: "Hard-wired start/stop (no PLC)",
     thai: "วงจรควบคุมมอเตอร์ด้วยรีเลย์ (ไม่ใช้ PLC)",
@@ -1268,7 +1302,16 @@ export function instantiateTemplate(t: Template, boardId: string, langPref?: Lan
     let target: BoardPin | undefined;
     if (!token.startsWith("@")) {
       const [p2, pin2] = token.split(".");
-      wires.push({ id: newId("w"), from: { part: p2, pin: pin2 }, to: { part: pid, pin: pinId }, color: WIRE_COLORS.signal[colorIdx++ % WIRE_COLORS.signal.length], points: [] });
+      // control panels: +24 V red, 0 V / COM dark, compressed air blue, everything else from the palette
+      const color =
+        pin.role === "air" || pinRoleOf(parts, p2, pin2) === "air"
+          ? WIRE_COLORS.air
+          : p2 === "board" && /^p24$/.test(pin2)
+            ? WIRE_COLORS.vcc
+            : p2 === "board" && /^(com|p0v.*)$/.test(pin2)
+              ? WIRE_COLORS.gnd
+              : WIRE_COLORS.signal[colorIdx++ % WIRE_COLORS.signal.length];
+      wires.push({ id: newId("w"), from: { part: p2, pin: pin2 }, to: { part: pid, pin: pinId }, color, points: [] });
       continue;
     }
     const tk = token.slice(1);

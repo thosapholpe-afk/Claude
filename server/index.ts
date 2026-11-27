@@ -420,7 +420,15 @@ If it is one of them, set match to its id. Otherwise set match "unknown" and des
 });
 
 // ------------------------------------------------------------------ Claude link (MCP)
-mountMcp(app, PUBLIC_URL);
+/** The hashed entry bundle name identifies the deployed build (null in dev). */
+const BUILD = (() => {
+  try {
+    return fs.readFileSync(path.join(here, "..", "dist", "index.html"), "utf8").match(/assets\/(index-[\w-]+\.js)/)?.[1] ?? null;
+  } catch {
+    return null;
+  }
+})();
+mountMcp(app, PUBLIC_URL, BUILD);
 
 // ------------------------------------------------------------------ static (production)
 const dist = path.join(here, "..", "dist");

@@ -485,3 +485,19 @@ export function selectorTimerProgram(): LadderProgram {
     ],
   };
 }
+
+/** 5/2 spring-return valve on Y0 cycling a cylinder between its reed switches a0 (X2) and a1 (X3). */
+export function pneumaticCycleProgram(): LadderProgram {
+  return {
+    kind: "ladder",
+    symbols: { X0: "START", X1: "STOP (NC)", X2: "a0 HOME", X3: "a1 END", Y0: "YV1 EXTEND", Y1: "RUN LAMP", M0: "RUN", T0: "DWELL", C0: "STROKES" },
+    rungs: [
+      rung([{ cells: [NO("X0"), NO("X1")], out: { t: "coil", a: "M0" } }, { cells: [NO("M0")] }], [[0, 1]], "RUN latch: START sets it, STOP drops it (STOP is wired NC, so the program examines it as NO)."),
+      rung([{ cells: [NO("X3")], out: { t: "ton", a: "T0", pre: 0.5 } }], [], "Dwell 0.5 s at the extended end (a1)."),
+      rung([{ cells: [NO("M0"), NO("X2"), NC("T0")], out: { t: "coil", a: "Y0" } }, { cells: [null, NO("Y0")] }], [[0, 1], [0, 2]], "Extend from home (a0) and keep extending until the dwell at a1 is over; the valve spring then retracts the cylinder. Repeats while RUN."),
+      rung([{ cells: [NO("M0")], out: { t: "coil", a: "Y1" } }], [], "RUN lamp."),
+      rung([{ cells: [{ t: "rise", a: "X3" }], out: { t: "ctu", a: "C0", pre: 9999 } }, { cells: [NO("X0")], out: { t: "rst", a: "C0" } }], [], "Count strokes in C0; START clears the count."),
+    ],
+  };
+}
+

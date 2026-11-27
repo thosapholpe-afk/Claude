@@ -6,6 +6,7 @@ import type { BoardDef, BoardPin, Cap, PartInstance, PartPin, Project, Wire } fr
 export const WIRE_COLORS = {
   vcc: "#ef3b36",
   gnd: "#2b2f33",
+  air: "#4fb3e8",
   signal: ["#ff9f1c", "#ffd23f", "#3ddc97", "#2ec4ff", "#b388ff", "#f4f4f4", "#ff6fb5", "#7bd389"],
 };
 

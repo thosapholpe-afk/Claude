@@ -167,7 +167,7 @@ export const AGENT_TOOLS: ToolDef[] = [
   },
 ];
 
-const CATEGORIES = ["output", "input", "sensor", "actuator", "display", "passive", "prototyping", "control", "instrument", "custom"];
+const CATEGORIES = ["output", "input", "sensor", "actuator", "display", "passive", "prototyping", "control", "pneumatic", "instrument", "custom"];
 
 export const LADDER_HELP = `Replace (or append to) the PLC ladder program and switch the code language to ladder. Each rung has rows; a row is a list of up to 6 contacts read left to right (series = AND) and optionally ends in an output. Extra rows are parallel branches (OR) joined to the row above with "branches": [row, boundary] where boundary b sits before column b (0 = left rail, 6 = just before the outputs). A row starts at the left rail unless "start": n puts its first contact in column n.
 Contacts: "X0" (normally open), "NC X1" (normally closed), "P X2" (rising edge), "N X2" (falling edge), "-" (plain wire), "" (empty). Outputs: "OUT Y0", "SET M0", "RST M0", "TON T0 3" (on-delay seconds), "TOF T1 2" (off-delay), "CTU C0 5" (count up), "RST C0". Addresses: X0–X7 inputs, Y0–Y7 outputs, M0–M31 relays, T0–T15 timers, C0–C15 counters.
@@ -211,7 +211,7 @@ export const STUDIO_TOOLS: ToolDef[] = [
   },
   {
     name: "wire",
-    description: "Draw exactly one wire between two terminals, with no automatic completion — use it for control and power circuits and for anything part-to-part. An end is a board pin (PLC: X0–X7, Y0–Y7, COM, S/S, 24V, 0V; MCU: GP10, D5, A0, GPIO17, 3V3, 5V, GND; or 'PLC.X0') or a part terminal 'LABEL.PIN' (S1.3, S1.4, K1.A1, K1.13, OL.95, Q1.L1, M1.U, H1.X1, LED1.A, METER.COM). get_catalog type=... lists a part's terminals.",
+    description: "Draw exactly one wire between two terminals, with no automatic completion — use it for control and power circuits and for anything part-to-part. An end is a board pin (PLC: X0–X7, Y0–Y7, COM, S/S, 24V, 0V; MCU: GP10, D5, A0, GPIO17, 3V3, 5V, GND; or 'PLC.X0') or a part terminal 'LABEL.PIN' (S1.3, S1.4, K1.A1, K1.13, OL.95, Q1.L1, M1.U, H1.X1, LED1.A, METER.COM). Air tubes use the same tool: AIR.P → YV1.1, YV1.4 → CYL1.A, YV1.2 → CYL1.B. get_catalog type=... lists a part's terminals.",
     input_schema: obj({ from: { type: "string" }, to: { type: "string" }, color: { type: "string", description: "CSS colour, e.g. #ef3b36 for +24 V, #2b2f33 for 0 V, #2ec4ff for control" } }, ["from", "to"]),
   },
   {
@@ -283,6 +283,7 @@ How to work:
 - Act through the tools; the canvas updates live in front of the user. Prefer doing over describing.
 - MCU circuit: pick a template when one fits, otherwise add_part + connect/auto_wire, then write_code with the exact pin numbers from get_circuit, then simulation start.
 - PLC / control circuit: set_mode plc (or a plc-* template), add_part the control parts, wire each terminal explicitly with wire (24V → S1.3, S1.4 → X0, Y0 → K1.A1, K1.A2 → COM …), tidy_wires, write_ladder, then operate the buttons and observe the result.
+- Pneumatics: air-supply (port P), 5/2 valves valve52 (spring return, coil A1-A2) or valve52d (double solenoid A1-A2 / B1-B2) with ports 1 (P), 4 (A), 2 (B), and the double-acting cylinder (ports A extend / B retract, reed switches a0+/a0 home and a1+/a1 end). Tubes: AIR.P → YV1.1, YV1.4 → CYL.A, YV1.2 → CYL.B; reeds: 24V → CYL.a0p, CYL.a0 → X input.
 - Lay the drawing out cleanly with move_part: inputs left, PLC/board in the middle, outputs and power right or below.
 - When the user asks to "put the board in" a situation, call set_scenario (view_3d true) and start the simulation if it is not running.
 - Respect electrical reality: 3.3 V logic on ESP32/Pico/Pi; LEDs need resistors; servos and HC-SR04 want 5 V; the Pi 4 has no ADC; on ESP32 prefer ADC1 pins (GPIO32–39) for analog sensors; PLC outputs switch 24 V at 0.5 A — drive motors through contactors; STOP/E-stop/overload are wired NC and examined as NO contacts.

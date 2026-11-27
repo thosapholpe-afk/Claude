@@ -1512,6 +1512,222 @@ function Motor3Model({ inst, def }: { inst: PartInstance; def: PartDef }) {
 }
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// pneumatics: cylinder with a moving rod, 5/2 valves, FRL air supply
+// ---------------------------------------------------------------------------
+const ALU = { color: "#c3cad1", roughness: 0.32, metalness: 0.75 };
+const CHROME = { color: "#e6ebef", roughness: 0.12, metalness: 0.95 };
+const BRASS = { color: "#c9a24a", roughness: 0.35, metalness: 0.8 };
+
+function AirFittings({ def, y }: { def: PartDef; y: number }) {
+  return (
+    <group>
+      {def.pins
+        .filter((p) => p.role === "air")
+        .map((p) => (
+          <group key={p.id} position={[p.x, y, p.y]}>
+            <mesh castShadow>
+              <cylinderGeometry args={[1.8, 1.8, 3, 18]} />
+              <meshStandardMaterial {...BRASS} />
+            </mesh>
+            <mesh position={[0, 1.8, 0]}>
+              <cylinderGeometry args={[1.5, 1.5, 0.8, 18]} />
+              <meshStandardMaterial color="#2f7fc0" roughness={0.4} />
+            </mesh>
+          </group>
+        ))}
+    </group>
+  );
+}
+
+function CylinderModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
+  const L = useLive(inst.id);
+  const rod = useRef<THREE.Group>(null);
+  const cy = 9; // barrel axis height
+  const z = def.h / 2;
+  useFrame((_, dt) => {
+    if (!rod.current) return;
+    const target = Math.max(0, Math.min(1, L?.pos ?? 0)) * 21.5;
+    // the sim already moves at the set speed: follow it closely
+    rod.current.position.x = THREE.MathUtils.damp(rod.current.position.x, target, 30, dt);
+  });
+  const s0 = !!L?.leds?.[0];
+  const s1 = !!L?.leds?.[1];
+  return (
+    <group>
+      {/* foot mounts */}
+      {[5.3, 62.7].map((x) => (
+        <mesh key={x} position={[x, 1.5, z]} castShadow receiveShadow>
+          <boxGeometry args={[6, 3, 16]} />
+          <meshStandardMaterial color="#5a6068" roughness={0.5} metalness={0.4} />
+        </mesh>
+      ))}
+      {/* profile barrel */}
+      <RoundedBox args={[53, 11.5, 11.5]} radius={1.6} smoothness={3} position={[34, cy, z]} castShadow receiveShadow>
+        <meshStandardMaterial {...ALU} />
+      </RoundedBox>
+      {[5.3, 62.7].map((x) => (
+        <RoundedBox key={x} args={[6.6, 13, 13]} radius={1} smoothness={2} position={[x, cy, z]} castShadow>
+          <meshStandardMaterial color="#4a4f56" roughness={0.45} metalness={0.5} />
+        </RoundedBox>
+      ))}
+      {/* piston rod + rod-end nut, moving together */}
+      <group ref={rod}>
+        <mesh position={[66 - 6 + 12, cy, z]} rotation={[0, 0, Math.PI / 2]} castShadow>
+          <cylinderGeometry args={[1.6, 1.6, 24, 24]} />
+          <meshStandardMaterial {...CHROME} />
+        </mesh>
+        <mesh position={[84.3, cy, z]} castShadow>
+          <boxGeometry args={[3.4, 5, 5]} />
+          <meshStandardMaterial color="#8b949c" roughness={0.3} metalness={0.85} />
+        </mesh>
+      </group>
+      {/* reed switches a0 / a1 clamped in the profile slot, LED on the end */}
+      {[
+        [15.24, s0],
+        [50.8, s1],
+      ].map(([x, on]) => (
+        <group key={String(x)} position={[Number(x), cy + 6.2, z + 3.2]}>
+          <mesh castShadow>
+            <boxGeometry args={[9, 2.2, 3]} />
+            <meshStandardMaterial color="#1f5fa8" roughness={0.5} />
+          </mesh>
+          <mesh position={[3.4, 1.2, 0]}>
+            <boxGeometry args={[1.6, 0.6, 1.6]} />
+            <meshStandardMaterial color={on ? "#ff3b30" : "#4d2a28"} emissive={on ? "#ff3b30" : "#000"} emissiveIntensity={on ? 3 : 0} toneMapped={!on} />
+          </mesh>
+        </group>
+      ))}
+      <AirFittings def={def} y={cy + 6.5} />
+    </group>
+  );
+}
+
+function ValveModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
+  const L = useLive(inst.id);
+  const dbl = def.type === "valve52d";
+  const W = def.w;
+  const btn = useRef<THREE.Mesh>(null);
+  const shifted = !!L?.on;
+  const coilA = dbl ? !!L?.leds?.[0] : !!L?.indicator;
+  const coilB = dbl ? !!L?.leds?.[1] : false;
+  const manual = shifted && !coilA && !coilB;
+  useFrame((_, dt) => {
+    if (btn.current) btn.current.position.y = THREE.MathUtils.damp(btn.current.position.y, manual ? 15.2 : 16.2, 25, dt);
+  });
+  const bx0 = 13;
+  const bx1 = dbl ? W - 13 : W - 4.5;
+  const z = 13.97;
+  const coil = (x: number, lit: boolean) => (
+    <group position={[x, 0, z]}>
+      <RoundedBox args={[12, 15, 20]} radius={1.2} smoothness={2} position={[0, 7.5, 0]} castShadow>
+        <meshStandardMaterial color="#1d1f23" roughness={0.55} />
+      </RoundedBox>
+      <mesh position={[0, 15.4, -6.5]}>
+        <boxGeometry args={[1.8, 0.6, 1.2]} />
+        <meshStandardMaterial color={lit ? "#ffb020" : "#4a3a20"} emissive={lit ? "#ffb020" : "#000"} emissiveIntensity={lit ? 3 : 0} toneMapped={!lit} />
+      </mesh>
+      {lit && <pointLight color="#ffb020" intensity={0.25} distance={40} position={[0, 18, -6]} />}
+      <mesh position={[0, 15.2, 4]}>
+        <boxGeometry args={[7, 0.3, 5]} />
+        <meshStandardMaterial color="#2c2e33" />
+      </mesh>
+    </group>
+  );
+  return (
+    <group>
+      <RoundedBox args={[bx1 - bx0, 13, 20]} radius={1.2} smoothness={3} position={[(bx0 + bx1) / 2, 6.5, z]} castShadow receiveShadow>
+        <meshStandardMaterial {...ALU} />
+      </RoundedBox>
+      {/* spool position flag on top */}
+      <mesh position={[(bx0 + bx1) / 2 + (shifted ? -4 : 4), 13.3, z]}>
+        <boxGeometry args={[8, 0.6, 3]} />
+        <meshStandardMaterial color={shifted ? "#3fb6ff" : "#8b98a5"} emissive={shifted ? "#3fb6ff" : "#000"} emissiveIntensity={shifted ? 0.8 : 0} />
+      </mesh>
+      {coil(6.7, coilA)}
+      {dbl ? coil(W - 6.7, coilB) : (
+        <mesh position={[W - 2.3, 6.5, z]} castShadow>
+          <boxGeometry args={[4.4, 10, 14]} />
+          <meshStandardMaterial color="#4a4f56" roughness={0.45} metalness={0.4} />
+        </mesh>
+      )}
+      {/* manual override (blue) */}
+      <mesh ref={btn} position={[6.7, 16.2, z + 3]}>
+        <cylinderGeometry args={[1.4, 1.4, 1.6, 20]} />
+        <meshStandardMaterial color="#2c6fe0" roughness={0.4} />
+      </mesh>
+      {/* silencers on 3 and 5 */}
+      {[20.32, 35.56].map((x) => (
+        <mesh key={x} position={[x, 3, 26.2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[1.3, 1.3, 4, 14]} />
+          <meshStandardMaterial color="#a8875a" roughness={0.85} metalness={0.3} />
+        </mesh>
+      ))}
+      <AirFittings def={def} y={13.8} />
+      <ScrewTerminals pins={def.pins.filter((p) => p.role !== "air")} y={15} />
+    </group>
+  );
+}
+
+function AirSupplyModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
+  const L = useLive(inst.id);
+  const needle = useRef<THREE.Group>(null);
+  const lever = useRef<THREE.Group>(null);
+  const open = L?.on !== false;
+  const bar = Number(L?.reading ?? 0);
+  useFrame((_, dt) => {
+    if (needle.current) needle.current.rotation.z = THREE.MathUtils.damp(needle.current.rotation.z, THREE.MathUtils.degToRad(120 - Math.max(0, Math.min(10, bar)) * 24), 10, dt);
+    if (lever.current) lever.current.rotation.y = THREE.MathUtils.damp(lever.current.rotation.y, open ? 0 : Math.PI / 2, 14, dt);
+  });
+  const cx = 15.24;
+  const z = 20;
+  return (
+    <group>
+      {/* bowl + regulator body + gauge, standing up */}
+      <mesh position={[cx, 14, z]} castShadow>
+        <cylinderGeometry args={[7, 6, 28, 28]} />
+        <meshStandardMaterial color="#cfe6f7" roughness={0.12} metalness={0.1} transparent opacity={0.55} />
+      </mesh>
+      <RoundedBox args={[18, 16, 18]} radius={1.6} smoothness={3} position={[cx, 36, z]} castShadow>
+        <meshStandardMaterial color="#3f6fa0" roughness={0.45} metalness={0.2} />
+      </RoundedBox>
+      <mesh position={[cx, 50, z]} castShadow>
+        <cylinderGeometry args={[4, 4.5, 12, 24]} />
+        <meshStandardMaterial color="#2a2c30" roughness={0.6} />
+      </mesh>
+      <group position={[cx, 38, z + 10.5]}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[6.5, 6.5, 2.4, 32]} />
+          <meshStandardMaterial {...METAL} />
+        </mesh>
+        <mesh position={[0, 0, 1.25]}>
+          <circleGeometry args={[5.8, 32]} />
+          <meshStandardMaterial color="#f4f2ec" roughness={0.5} />
+        </mesh>
+        <group ref={needle} position={[0, 0, 1.4]}>
+          <mesh position={[0, 2.3, 0]}>
+            <boxGeometry args={[0.5, 4.6, 0.2]} />
+            <meshStandardMaterial color="#d1262c" />
+          </mesh>
+        </group>
+      </group>
+      {/* outlet pipe to P with the ball valve lever */}
+      <mesh position={[cx, 36, 8]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[1.6, 1.6, 10, 16]} />
+        <meshStandardMaterial {...BRASS} />
+      </mesh>
+      <group ref={lever} position={[cx, 39.5, 8]}>
+        <mesh position={[0, 0, 4.5]}>
+          <boxGeometry args={[1.6, 1, 10]} />
+          <meshStandardMaterial color={open ? "#e0352d" : "#f2c419"} roughness={0.4} />
+        </mesh>
+      </group>
+      <AirFittings def={def} y={2} />
+    </group>
+  );
+}
+
 export function PartModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
   switch (def.type) {
     case "led":
@@ -1559,6 +1775,13 @@ export function PartModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
       return <RainModel inst={inst} def={def} />;
     case "motor3":
       return <Motor3Model inst={inst} def={def} />;
+    case "cylinder":
+      return <CylinderModel inst={inst} def={def} />;
+    case "valve52":
+    case "valve52d":
+      return <ValveModel inst={inst} def={def} />;
+    case "air-supply":
+      return <AirSupplyModel inst={inst} def={def} />;
     default:
       if (DEVICE[def.type]) return <DeviceModel inst={inst} def={def} />;
       return <ModuleModel inst={inst} def={def} />;

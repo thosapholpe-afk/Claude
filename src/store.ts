@@ -1,12 +1,12 @@
 import { create } from "zustand";
 import { getBoard } from "./core/boards";
-import { BOARD_ID, buildTopology, instBounds, isBoard, isHost } from "./core/circuit";
+import { BOARD_ID, buildTopology, instBounds, isAirWire, isBoard, isHost } from "./core/circuit";
 import { defaultScenarioState } from "./core/env";
 import { customSensorToPart, getPart, registerPart } from "./core/parts";
 import { engine, type SerialLine, type SimSnapshot } from "./core/sim";
 import { BOARD_ORIGIN, instantiateTemplate, templateFor, templateSupports } from "./core/templates";
 import type { CaseParams, CustomSensorDef, Lang, MqttConfig, PartInstance, Project, ScenarioState, Wire } from "./core/types";
-import { labelPrefix, newId, nextLabel, routeWire, snap } from "./core/wiring";
+import { labelPrefix, newId, nextLabel, routeWire, snap, WIRE_COLORS } from "./core/wiring";
 import { planMount } from "./core/mount";
 import { loadCustomSensors, loadProject, saveCustomSensors, saveProject } from "./lib/persist";
 
@@ -334,7 +334,7 @@ export const useStudio = create<State>((set, get) => ({
     if (w.from.part === w.to.part && w.from.pin === w.to.pin) return;
     const exists = get().project.wires.some((x) => (x.from.part === w.from.part && x.from.pin === w.from.pin && x.to.part === w.to.part && x.to.pin === w.to.pin) || (x.to.part === w.from.part && x.to.pin === w.from.pin && x.from.part === w.to.part && x.from.pin === w.to.pin));
     if (exists) return;
-    const color = w.color ?? get().wireColor ?? guessWireColor(w.from.pin, w.to.pin, get().project.wires.length);
+    const color = w.color ?? (isAirWire(get().project.parts, w) ? WIRE_COLORS.air : null) ?? get().wireColor ?? guessWireColor(w.from.pin, w.to.pin, get().project.wires.length);
     get().commit((p) => ({ ...p, wires: [...p.wires, { id: newId("w"), from: w.from, to: w.to, color, points: [] }] }));
   },
   tidyWires: (ids) => {

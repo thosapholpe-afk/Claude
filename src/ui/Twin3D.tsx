@@ -1,13 +1,13 @@
 import { ContactShadows, Environment, Lightformer, OrbitControls } from "@react-three/drei";
 import { Bloom, EffectComposer, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { builtinLedId, builtinLedLit, getBoard } from "../core/boards";
-import { buildTopology, endpointPos, footprintOf, instBounds, isBoard, isHost } from "../core/circuit";
+import { buildTopology, endpointPos, footprintOf, instBounds, isAirWire, isBoard, isHost } from "../core/circuit";
 import { getScenario, vibAccel } from "../core/env";
-import { getPart } from "../core/parts";
+import { getPart, type PartDef } from "../core/parts";
 import { engine } from "../core/sim";
 import type { BoardDef, PartInstance } from "../core/types";
 import { useStudio } from "../store";
@@ -88,15 +88,16 @@ export function Wires3D({ pinTop, only }: { pinTop: (part: string) => number; on
           new THREE.Vector3(b.x * S, hb, b.y * S),
         ];
         const curve = new THREE.CatmullRomCurve3(pts);
-        return { id: w.id, color: w.color, curve, geo: new THREE.TubeGeometry(curve, 40, 0.045, 8, false) };
+        const air = isAirWire(project.parts, w);
+        return { id: w.id, color: w.color, curve, air, geo: new THREE.TubeGeometry(curve, 40, air ? 0.2 : 0.045, air ? 12 : 8, false) };
       })
-      .filter(Boolean) as { id: string; color: string; curve: THREE.CatmullRomCurve3; geo: THREE.TubeGeometry }[];
+      .filter(Boolean) as { id: string; color: string; air: boolean; curve: THREE.CatmullRomCurve3; geo: THREE.TubeGeometry }[];
   }, [project.wires, project.parts, pinTop, only]);
   return (
     <group>
       {tubes.map((t) => (
         <mesh key={t.id} geometry={t.geo} castShadow>
-          <meshStandardMaterial color={t.color} roughness={0.45} />
+          {t.air ? <meshStandardMaterial color={t.color} roughness={0.25} transparent opacity={0.78} /> : <meshStandardMaterial color={t.color} roughness={0.45} />}
         </mesh>
       ))}
       <CurrentFlow tubes={tubes} />
@@ -415,8 +416,51 @@ export function Instance3D({ inst, board, lift }: { inst: PartInstance; board: B
   if (!def) return null;
   return (
     <Placed inst={inst} w={def.w} h={def.h} lift={lift}>
-      <PartModel inst={inst} def={def} />
+      {def.pressable || def.toggle ? (
+        <Operable inst={inst} def={def}>
+          <PartModel inst={inst} def={def} />
+        </Operable>
+      ) : (
+        <PartModel inst={inst} def={def} />
+      )}
     </Placed>
+  );
+}
+
+/** Hands-on controls in 3D: hold push buttons / valve overrides, click to flip selectors, E-stops, breakers, ball valves. */
+function Operable({ inst, def, children }: { inst: PartInstance; def: PartDef; children: ReactNode }) {
+  const controls = useThree((s) => s.controls) as unknown as { enabled: boolean } | null;
+  const running = useStudio((s) => s.sim.running);
+  const [hover, setHover] = useState(false);
+  useEffect(() => {
+    document.body.style.cursor = hover && running ? "pointer" : "";
+  }, [hover, running]);
+  useEffect(() => () => void (document.body.style.cursor = ""), []);
+  const down = (e: ThreeEvent<PointerEvent>) => {
+    if (!useStudio.getState().sim.running) return;
+    e.stopPropagation();
+    // keep the camera still while a finger is on the control
+    if (controls) controls.enabled = false;
+    const done = () => {
+      if (def.pressable && !def.toggle) engine.setInput(inst.id, { pressed: false });
+      if (controls) controls.enabled = true;
+    };
+    if (def.toggle) engine.setInput(inst.id, def.toggle(engine.getInput(inst.id)));
+    else engine.setInput(inst.id, { pressed: true });
+    window.addEventListener("pointerup", done, { once: true });
+    window.addEventListener("pointercancel", done, { once: true });
+  };
+  return (
+    <group
+      onPointerDown={down}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setHover(true);
+      }}
+      onPointerOut={() => setHover(false)}
+    >
+      {children}
+    </group>
   );
 }
 

@@ -21,6 +21,10 @@ export interface PartLive {
   outV?: number;
   indicator?: boolean;
   warn?: string;
+  /** Travel 0..1 (cylinder rod, valve spool). */
+  pos?: number;
+  /** Small status LEDs (reed switches a0 / a1). */
+  leds?: boolean[];
 }
 
 /** Context handed to a part while the solver builds the conductance matrix. */
@@ -1185,6 +1189,143 @@ export const PARTS: PartDef[] = [
       const el = on ? c.t - (c.mem.since ?? c.t) : 0;
       c.mem.done = on && el >= Number(c.props.delay ?? 3) ? 1 : 0;
       return { indicator: on, on: Boolean(c.mem.done), reading: el, readingUnit: "s" };
+    },
+  },
+  // ------------------------------------------------------------------ pneumatics
+  // Air lines are nets of their own: a net's voltage is its gauge pressure in bar.
+  {
+    type: "air-supply",
+    name: "Air supply 6 bar (FRL)",
+    category: "pneumatic",
+    description: "Compressed-air service unit: filter, regulator with gauge and a ball valve. Port P feeds the valves' port 1. Click it while running to open or close the ball valve; the pressure is adjustable live.",
+    w: 30.48,
+    h: 45.72,
+    h3: 72,
+    pins: [pin("P", "P (out)", 15.24, 2.54, "air")],
+    props: [{ key: "bar", label: "Pressure", type: "range", default: 6, min: 0, max: 10, step: 0.5, unit: "bar", live: true }],
+    toggle: (i) => ({ off: !i.off }),
+    toggleLabel: (i) => (i.off ? "Ball valve closed" : "Ball valve open"),
+    keywords: ["air", "compressor", "frl", "regulator", "pneumatic supply", "ลม", "ปั๊มลม", "แหล่งจ่ายลม"],
+    stamp: (c) => {
+      if (c.input.off) c.R(c.n("P"), -1, 2);
+      else c.V(c.n("P"), -1, clamp(Number(c.input.bar ?? c.props.bar ?? 6), 0, 12), 0.05);
+    },
+    post: (c) => {
+      const p = c.v(c.n("P"));
+      return { on: !c.input.off, reading: p, readingUnit: "bar", warn: !c.input.off && p < Number(c.input.bar ?? c.props.bar ?? 6) * 0.5 ? "Air is escaping — is a supply line open to exhaust?" : undefined };
+    },
+  },
+  {
+    type: "valve52",
+    name: "5/2 solenoid valve, spring return",
+    category: "pneumatic",
+    description: "Single-solenoid 5/2 valve with a 24 VDC coil (Y14) on A1-A2. At rest 1→2 and 4→5 (exhaust); energised 1→4 and 2→3. Click it while running to hold the manual override.",
+    w: 45.72,
+    h: 27.94,
+    h3: 32,
+    pins: [
+      pin("A1", "A1", 3.81, 2.54, "passive"),
+      pin("A2", "A2", 8.89, 2.54, "passive"),
+      pin("4", "4 (A)", 22.86, 2.54, "air"),
+      pin("2", "2 (B)", 33.02, 2.54, "air"),
+      pin("1", "1 (P)", 27.94, 25.4, "air"),
+    ],
+    props: [],
+    pressable: true,
+    switches: (_p, _i, mem) => (mem.shift ? [["1", "4"]] : [["1", "2"]]),
+    keywords: ["5/2", "solenoid valve", "valve", "directional valve", "pneumatic", "โซลินอยด์วาล์ว", "วาล์วลม", "วาล์ว 5/2"],
+    stamp: (c) => {
+      c.R(c.n("A1"), c.n("A2"), 480);
+      c.R(c.n(c.mem.shift ? "2" : "4"), -1, 1); // the other cylinder line vents through 3 / 5
+    },
+    post: (c) => {
+      const v = Math.abs(c.v(c.n("A1")) - c.v(c.n("A2")));
+      const coil = v > (c.mem.coil ? 8 : 16);
+      c.mem.coil = coil ? 1 : 0;
+      c.mem.shift = coil || c.input.pressed ? 1 : 0;
+      return { on: !!c.mem.shift, indicator: coil, pos: c.mem.shift, reading: c.v(c.n("1")), readingUnit: "bar", warn: v > 30 ? `Coil sees ${v.toFixed(0)} V — rated 24 V` : undefined };
+    },
+  },
+  {
+    type: "valve52d",
+    name: "5/2 solenoid valve, double solenoid",
+    category: "pneumatic",
+    description: "Bistable 5/2 valve: a pulse on Y14 (A1-A2) shifts it to 1→4, a pulse on Y12 (B1-B2) back to 1→2; it stays where it was last sent. Click it while running to flip the spool by hand.",
+    w: 55.88,
+    h: 27.94,
+    h3: 32,
+    pins: [
+      pin("A1", "A1 (Y14)", 3.81, 2.54, "passive"),
+      pin("A2", "A2 (Y14)", 8.89, 2.54, "passive"),
+      pin("4", "4 (A)", 22.86, 2.54, "air"),
+      pin("2", "2 (B)", 33.02, 2.54, "air"),
+      pin("B1", "B1 (Y12)", 46.99, 2.54, "passive"),
+      pin("B2", "B2 (Y12)", 52.07, 2.54, "passive"),
+      pin("1", "1 (P)", 27.94, 25.4, "air"),
+    ],
+    props: [],
+    toggle: (i) => ({ flip: Number(i.flip ?? 0) + 1 }),
+    toggleLabel: () => "Manual override — flip the spool",
+    switches: (_p, _i, mem) => (mem.shift ? [["1", "4"]] : [["1", "2"]]),
+    keywords: ["5/2", "double solenoid", "bistable", "memory valve", "โซลินอยด์วาล์ว 2 หัว"],
+    stamp: (c) => {
+      c.R(c.n("A1"), c.n("A2"), 480);
+      c.R(c.n("B1"), c.n("B2"), 480);
+      c.R(c.n(c.mem.shift ? "2" : "4"), -1, 1);
+    },
+    post: (c) => {
+      const y14 = Math.abs(c.v(c.n("A1")) - c.v(c.n("A2"))) > 16;
+      const y12 = Math.abs(c.v(c.n("B1")) - c.v(c.n("B2"))) > 16;
+      if (y14 && !y12) c.mem.shift = 1;
+      else if (y12 && !y14) c.mem.shift = 0;
+      const flip = Number(c.input.flip ?? 0);
+      if (flip !== (c.mem.flip ?? 0)) {
+        c.mem.flip = flip;
+        c.mem.shift = c.mem.shift ? 0 : 1;
+      }
+      return { on: !!c.mem.shift, indicator: y14 || y12, leds: [y14, y12], pos: c.mem.shift ?? 0, reading: c.v(c.n("1")), readingUnit: "bar", warn: y14 && y12 ? "Both coils energised — the spool stays put" : undefined };
+    },
+  },
+  {
+    type: "cylinder",
+    name: "Double-acting air cylinder",
+    category: "pneumatic",
+    description: "Ø32 double-acting cylinder with a magnetic piston. Air on A (cap end) extends it, air on B (rod end) retracts it. Reed switches a0 (retracted) and a1 (extended) close at the ends: wire 24 V to a0+ / a1+ and a0 / a1 to PLC inputs. Speed is the flow-control setting.",
+    w: 91.44,
+    h: 20.32,
+    h3: 34,
+    pins: [
+      pin("A", "A (extend)", 7.62, 2.54, "air"),
+      pin("B", "B (retract)", 58.42, 2.54, "air"),
+      pin("a0p", "a0+", 12.7, 17.78, "passive"),
+      pin("a0", "a0 out", 17.78, 17.78, "passive"),
+      pin("a1p", "a1+", 48.26, 17.78, "passive"),
+      pin("a1", "a1 out", 53.34, 17.78, "passive"),
+    ],
+    props: [
+      { key: "stroke", label: "Stroke", type: "number", default: 100, min: 10, max: 500, step: 10, unit: "mm" },
+      { key: "speed", label: "Speed (flow control)", type: "range", default: 200, min: 20, max: 800, step: 10, unit: "mm/s", live: true },
+    ],
+    switches: (p, _i, mem) => {
+      const s = Number(p.stroke ?? 100);
+      const pos = mem.pos ?? 0;
+      const out: [string, string][] = [];
+      if (pos <= 1) out.push(["a0p", "a0"]);
+      if (pos >= s - 1) out.push(["a1p", "a1"]);
+      return out;
+    },
+    keywords: ["cylinder", "air cylinder", "pneumatic cylinder", "actuator", "กระบอกลม", "กระบอกสูบ", "ลูกสูบ"],
+    post: (c) => {
+      const s = Number(c.props.stroke ?? 100);
+      const dp = c.v(c.n("A")) - c.v(c.n("B"));
+      const vmax = Number(c.input.speed ?? c.props.speed ?? 200);
+      // needs ~0.5 bar to break away, full speed from ~3.5 bar difference
+      const k = clamp((Math.abs(dp) - 0.5) / 3, 0, 1);
+      const vel = Math.sign(dp) * vmax * Math.sqrt(k);
+      const pos = clamp((c.mem.pos ?? 0) + vel * c.dt, 0, s);
+      c.mem.pos = pos;
+      const moving = k > 0 && ((vel > 0 && pos < s) || (vel < 0 && pos > 0));
+      return { pos: pos / s, on: moving, speed: moving ? Math.round(vel) : 0, reading: pos, readingUnit: "mm", leds: [pos <= 1, pos >= s - 1] };
     },
   },
   {

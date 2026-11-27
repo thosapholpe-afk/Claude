@@ -14,6 +14,7 @@ import { Part2D } from "./render/Parts2D";
 const CATS: { id: PartCategory | "all"; label: string }[] = [
   { id: "all", label: "All" },
   { id: "control", label: "Control" },
+  { id: "pneumatic", label: "Pneumatic" },
   { id: "instrument", label: "Meters" },
   { id: "sensor", label: "Sensors" },
   { id: "output", label: "Outputs" },
@@ -49,7 +50,7 @@ export function PartsPanel() {
     const ql = q.trim().toLowerCase();
     const list = allParts().filter((p) => (cat === "all" || p.category === cat) && (!ql || p.name.toLowerCase().includes(ql) || p.keywords.some((k) => k.includes(ql)) || p.description.toLowerCase().includes(ql)));
     // PLC mode lists the electrical-control parts and meters first
-    const rank = (p: PartDef) => (plcMode ? (p.category === "control" ? 0 : p.category === "instrument" ? 1 : 2) : p.category === "control" ? 2 : p.category === "instrument" ? 1 : 0);
+    const rank = (p: PartDef) => (plcMode ? (p.category === "control" ? 0 : p.category === "pneumatic" ? 1 : p.category === "instrument" ? 2 : 3) : p.category === "control" || p.category === "pneumatic" ? 2 : p.category === "instrument" ? 1 : 0);
     return [...list].sort((a, b) => rank(a) - rank(b));
   }, [q, cat, custom, plcMode]);
   const addCenter = (type: string) => {

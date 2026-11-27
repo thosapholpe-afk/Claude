@@ -148,7 +148,9 @@ export type PinRole =
   | "passive"
   | "anode"
   | "cathode"
-  | "nc";
+  | "nc"
+  /** Compressed-air port: its net's voltage is the line pressure in bar. */
+  | "air";
 
 export interface PartPin {
   id: string;
@@ -184,6 +186,7 @@ export type PartCategory =
   | "prototyping"
   | "custom"
   | "control"
+  | "pneumatic"
   | "instrument";
 
 export type EnvKey =

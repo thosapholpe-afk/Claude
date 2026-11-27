@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBoard, builtinLedId, builtinLedLit } from "../core/boards";
-import { BOARD_ID, endpointPos, footprintOf, instBounds, isBoard, isHost, pinWorld } from "../core/circuit";
+import { BOARD_ID, endpointPos, footprintOf, instBounds, isAirWire, isBoard, isHost, pinWorld } from "../core/circuit";
 import { getPart } from "../core/parts";
 import { engine } from "../core/sim";
 import type { BoardDef, PartInstance, Wire } from "../core/types";
@@ -330,6 +330,7 @@ export function Canvas() {
     const v = snapState?.wireV[w.id] ?? 0;
     const live = running && Math.abs(v) > 0.3;
     const sel = selectedWire === w.id;
+    const air = isAirWire(project.parts, w);
     return (
       <g
         key={w.id}
@@ -342,7 +343,14 @@ export function Canvas() {
         <path d={d} stroke="transparent" strokeWidth={3} fill="none" />
         {sel && <path d={d} stroke="var(--accent)" strokeWidth={2.4} fill="none" opacity={0.45} />}
         {diagram ? (
-          <path d={d} stroke={live ? "var(--dg-live)" : w.color} strokeWidth={0.45} fill="none" strokeLinejoin="round" />
+          <path d={d} stroke={live ? (air ? "#5cc4ff" : "var(--dg-live)") : w.color} strokeWidth={air ? 0.6 : 0.45} fill="none" strokeLinejoin="round" />
+        ) : air ? (
+          <>
+            {/* PU air tube: translucent blue with a highlight */}
+            <path d={d} stroke="rgba(0,0,0,.4)" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={d} stroke={w.color} strokeWidth={1.55} fill="none" opacity={0.62} strokeLinecap="round" strokeLinejoin="round" />
+            <path d={d} stroke="#e8f7ff" strokeWidth={0.32} fill="none" opacity={0.55} strokeLinecap="round" transform="translate(-0.28 -0.28)" />
+          </>
         ) : (
           <>
             <path d={d} stroke="rgba(0,0,0,.55)" strokeWidth={1.25} fill="none" strokeLinecap="round" />
@@ -356,12 +364,12 @@ export function Canvas() {
             <g transform={`translate(${mid.x} ${mid.y})`}>
               <rect x={-4.2} y={-1.35} width={8.4} height={2.7} rx={1.35} fill="var(--dg-tag)" />
               <text y={0.65} fontSize={1.75} textAnchor="middle" fill={live ? "var(--dg-live)" : "var(--dg-sub)"} fontFamily="IBM Plex Mono, monospace">
-                {Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1)} V
+                {Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1)} {air ? "bar" : "V"}
               </text>
             </g>
           );
         })()}
-        {live && <path d={d} className="flow" stroke={v > 4 ? "#f5b0a3" : "#e8d4a2"} strokeWidth={0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
+        {live && <path d={d} className="flow" stroke={air ? "#d4f1ff" : v > 4 ? "#f5b0a3" : "#e8d4a2"} strokeWidth={air ? 0.7 : 0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${air ? 0.7 : Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
         <circle cx={a.x} cy={a.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
         <circle cx={b.x} cy={b.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
       </g>

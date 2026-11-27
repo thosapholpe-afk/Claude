@@ -216,3 +216,14 @@ export function partDefOrNull(inst: PartInstance): PartDef | null {
   if (isBoard(inst)) return null;
   return getPart(inst.type) ?? null;
 }
+
+/** Role of a part pin (undefined for board pins and unknown parts). */
+export function pinRoleOf(parts: PartInstance[], partId: string, pinId: string) {
+  const inst = parts.find((p) => p.id === partId);
+  if (!inst || isBoard(inst)) return undefined;
+  return getPart(inst.type)?.pins.find((p) => p.id === pinId)?.role;
+}
+
+/** A compressed-air tube rather than an electrical wire. */
+export const isAirWire = (parts: PartInstance[], w: Pick<Wire, "from" | "to">) => pinRoleOf(parts, w.from.part, w.from.pin) === "air" || pinRoleOf(parts, w.to.part, w.to.pin) === "air";
+

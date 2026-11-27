@@ -132,7 +132,7 @@ function keyOf(req: Request): string | null {
   return null;
 }
 
-export function mountMcp(app: Express, publicUrl: string) {
+export function mountMcp(app: Express, publicUrl: string, build: string | null = null) {
   // ---------------------------------------------------------------- browser side
   app.get("/api/bridge/:key/events", (req, res) => {
     const key = req.params.key;
@@ -150,7 +150,8 @@ export function mountMcp(app: Express, publicUrl: string) {
     }
     const b: Bridge = { res, since: Date.now(), calls: 0, beat: setInterval(() => res.write(`: ping\n\n`), 20_000) };
     bridges.set(key, b);
-    res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ ok: true, url: `${publicUrl}/mcp/${key}` })}\n\n`);
+    // `build` lets a linked tab notice a new deploy and reload itself
+    res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ ok: true, url: `${publicUrl}/mcp/${key}`, build })}\n\n`);
     req.on("close", () => {
       clearInterval(b.beat);
       if (bridges.get(key) === b) bridges.delete(key);

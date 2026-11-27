@@ -100,6 +100,36 @@ function Terminals({ def }: { def: PartDef }) {
   );
 }
 
+/** Push-in air fittings (blue collet) for air ports, screw terminals for the rest. */
+function Ports({ def, dark }: { def: PartDef; dark?: boolean }) {
+  return (
+    <g>
+      {def.pins.map((p) => {
+        const top = p.y < def.h / 2;
+        const lbl = p.label.split(" ")[0];
+        return p.role === "air" ? (
+          <g key={p.id}>
+            <circle cx={p.x} cy={p.y} r={1.7} fill="#c9a24a" stroke="#7d6427" strokeWidth={0.2} />
+            <circle cx={p.x} cy={p.y} r={1.15} fill="#2f7fc0" />
+            <circle cx={p.x} cy={p.y} r={0.55} fill="#0d2a40" />
+            <text x={p.x + 2.3} y={p.y + (top ? 0.9 : 0.5)} fontSize={1.5} fill={dark ? "#e9ecef" : "var(--text-2)"} fontFamily="Chakra Petch" fontWeight={700}>
+              {lbl}
+            </text>
+          </g>
+        ) : (
+          <g key={p.id}>
+            <circle cx={p.x} cy={p.y} r={1.2} fill="url(#tc-metal)" stroke="#5b636b" strokeWidth={0.2} />
+            <line x1={p.x - 0.75} y1={p.y} x2={p.x + 0.75} y2={p.y} stroke="#4b5157" strokeWidth={0.3} />
+            <text x={p.x + (top ? 0 : 0)} y={top ? p.y - 1.7 : p.y + 2.6} fontSize={1.1} textAnchor="middle" fill={dark ? "#e9ecef" : "var(--text-2)"} fontFamily="Chakra Petch" fontWeight={600}>
+              {lbl}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
 function shadeHex(hex: string, amt: number) {
   const n = parseInt(hex.slice(1), 16);
   const c = (v: number) => Math.max(0, Math.min(255, v + amt));
@@ -876,6 +906,156 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           )}
           <rect x={11} y={44} width={28.8} height={6.6} rx={0.8} fill="#2a2c30" />
           <Terminals def={def} />
+        </g>
+      );
+    }
+    case "air-supply": {
+      const bar = Number(L.reading ?? 0);
+      const open = L.on !== false;
+      const ang = -120 + Math.max(0, Math.min(10, bar)) * 24;
+      const r = (ang * Math.PI) / 180;
+      return (
+        <g>
+          <rect x={4.6} y={4.6} width={22} height={40} rx={2} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          {/* manifold pipe to P */}
+          <rect x={13.9} y={2.4} width={2.7} height={5} fill="url(#tc-metal)" />
+          <rect x={4} y={6} width={22.5} height={7.5} rx={1.4} fill="#3f6fa0" stroke="#2c5078" strokeWidth={0.3} />
+          {/* ball valve lever: along the pipe = open */}
+          <g transform={`rotate(${open ? 0 : 90} 23 9.75)`}>
+            <rect x={17} y={8.9} width={11} height={1.7} rx={0.8} fill={open ? "#e0352d" : "#f2c419"} stroke="rgba(0,0,0,.4)" strokeWidth={0.2} />
+          </g>
+          <circle cx={23} cy={9.75} r={1.1} fill="#d8dde2" />
+          {/* gauge */}
+          <circle cx={11.5} cy={20.5} r={6.8} fill="url(#tc-metal)" stroke="#55606a" strokeWidth={0.3} />
+          <circle cx={11.5} cy={20.5} r={5.9} fill="#f4f2ec" />
+          {[0, 2, 4, 6, 8, 10].map((v) => {
+            const a = ((-120 + v * 24 - 90) * Math.PI) / 180;
+            return <line key={v} x1={11.5 + Math.cos(a) * 4.6} y1={20.5 + Math.sin(a) * 4.6} x2={11.5 + Math.cos(a) * 5.6} y2={20.5 + Math.sin(a) * 5.6} stroke="#2b2d31" strokeWidth={0.25} />;
+          })}
+          <path d={`M 11.5 20.5 L ${11.5 + Math.cos(r - Math.PI / 2) * 4.8} ${20.5 + Math.sin(r - Math.PI / 2) * 4.8}`} stroke="#d1262c" strokeWidth={0.45} strokeLinecap="round" style={{ transition: "d .2s" }} />
+          <circle cx={11.5} cy={20.5} r={0.7} fill="#2b2d31" />
+          <text x={11.5} y={24.6} fontSize={1.2} textAnchor="middle" fill="#2b2d31" fontFamily="IBM Plex Mono">
+            bar
+          </text>
+          {/* regulator knob */}
+          <rect x={20} y={15} width={6} height={9} rx={1.2} fill="#2a2c30" />
+          {[16.5, 18.5, 20.5, 22.5].map((y) => (
+            <line key={y} x1={20.6} y1={y} x2={25.4} y2={y} stroke="#55585f" strokeWidth={0.3} />
+          ))}
+          {/* filter bowl */}
+          <path d="M 6.5 28 H 24 V 36 Q 24 42.5 15.25 42.5 Q 6.5 42.5 6.5 36 Z" fill="rgba(200,225,245,.35)" stroke="#8fb3cf" strokeWidth={0.35} />
+          <rect x={9} y={36.5} width={12.5} height={3.6} rx={1.6} fill="rgba(120,170,210,.35)" />
+          <rect x={6} y={26.6} width={18.5} height={2} rx={0.6} fill="#2c5078" />
+          <text x={15.25} y={33.2} fontSize={2} textAnchor="middle" fill={open ? "#eaf6ff" : "#ffd23f"} fontFamily="IBM Plex Mono" fontWeight={600}>
+            {open ? `${bar.toFixed(1)} bar` : "CLOSED"}
+          </text>
+          <Ports def={def} />
+        </g>
+      );
+    }
+    case "valve52":
+    case "valve52d": {
+      const dbl = def.type === "valve52d";
+      const W = def.w;
+      const shifted = !!L.on;
+      const coilA = dbl ? !!L.leds?.[0] : !!L.indicator;
+      const coilB = dbl ? !!L.leds?.[1] : false;
+      const bx0 = 13;
+      const bx1 = dbl ? W - 13 : W - 4.5;
+      return (
+        <g>
+          <rect x={0.8} y={1.6} width={W - 0.4} height={22.5} rx={1.4} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          {/* valve body */}
+          <rect x={bx0} y={6.2} width={bx1 - bx0} height={15.5} rx={1.2} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <rect x={bx0 + 1.5} y={11.4} width={bx1 - bx0 - 3} height={5} rx={0.8} fill="#2a2c30" />
+          {/* spool in its window: slides toward the energised side */}
+          <rect x={bx0 + 2.2 + (shifted ? 0 : 6)} y={12.2} width={bx1 - bx0 - 10.4} height={3.4} rx={0.6} fill={shifted ? "#3fb6ff" : "#8b98a5"} style={{ transition: "x .12s" }} />
+          <text x={(bx0 + bx1) / 2} y={9.9} fontSize={1.9} textAnchor="middle" fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700}>
+            {inst.label} · 5/2
+          </text>
+          <text x={(bx0 + bx1) / 2} y={20.4} fontSize={1.35} textAnchor="middle" fill={shifted ? "#1d6fa8" : "#55585f"} fontFamily="Chakra Petch" fontWeight={700}>
+            {shifted ? "1→4  2→3" : "1→2  4→5"}
+          </text>
+          {/* solenoid Y14 (left) */}
+          <rect x={0.6} y={0.6} width={12.2} height={22} rx={1.2} fill="#1d1f23" stroke="#3b3e44" strokeWidth={0.3} />
+          <rect x={2} y={8} width={9.4} height={10} rx={0.8} fill="#2c2e33" />
+          <text x={6.7} y={12.2} fontSize={1.5} textAnchor="middle" fill="#e9ecef" fontFamily="Chakra Petch" fontWeight={700}>
+            Y14
+          </text>
+          <text x={6.7} y={14.4} fontSize={1.1} textAnchor="middle" fill="#9aa0a8" fontFamily="Chakra Petch">
+            24VDC
+          </text>
+          <IndicatorLed x={6.7} y={20} on={coilA} color="#ffb020" />
+          {/* manual override button */}
+          <circle cx={6.7} cy={16.6} r={1.2} fill={shifted && !coilA && !coilB ? "#2c6fe0" : "#3d6fb8"} stroke="#1d4fa8" strokeWidth={0.2} />
+          {dbl ? (
+            <g>
+              <rect x={W - 12.8} y={0.6} width={12.2} height={22} rx={1.2} fill="#1d1f23" stroke="#3b3e44" strokeWidth={0.3} />
+              <rect x={W - 11.4} y={8} width={9.4} height={10} rx={0.8} fill="#2c2e33" />
+              <text x={W - 6.7} y={12.2} fontSize={1.5} textAnchor="middle" fill="#e9ecef" fontFamily="Chakra Petch" fontWeight={700}>
+                Y12
+              </text>
+              <text x={W - 6.7} y={14.4} fontSize={1.1} textAnchor="middle" fill="#9aa0a8" fontFamily="Chakra Petch">
+                24VDC
+              </text>
+              <IndicatorLed x={W - 6.7} y={20} on={coilB} color="#ffb020" />
+            </g>
+          ) : (
+            <path d={`M ${W - 4.5} 14 l 0.9 -2.2 l 0.9 4.4 l 0.9 -4.4 l 0.9 4.4 l 0.6 -2.2`} fill="none" stroke="#9aa0a8" strokeWidth={0.4} />
+          )}
+          {/* exhaust silencers 5 and 3 */}
+          {[
+            [23.37 - 3.05, "5"],
+            [33.02 + 2.54, "3"],
+          ].map(([x, l]) => (
+            <g key={String(l)}>
+              <rect x={Number(x) - 1.1} y={21.7} width={2.2} height={4} rx={0.8} fill="#a8875a" />
+              <text x={Number(x)} y={27.4} fontSize={1.2} textAnchor="middle" fill="#9aa0a8" fontFamily="Chakra Petch">
+                {l}
+              </text>
+            </g>
+          ))}
+          <Ports def={def} />
+        </g>
+      );
+    }
+    case "cylinder": {
+      const pos = Math.max(0, Math.min(1, L.pos ?? 0));
+      const pistonX = 7.2 + pos * 50;
+      const rodEnd = 66 + pos * 21.5;
+      const s0 = !!L.leds?.[0];
+      const s1 = !!L.leds?.[1];
+      return (
+        <g>
+          <rect x={2.4} y={5.6} width={64} height={11} rx={1.2} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          {/* rod + rod-end nut */}
+          <rect x={60} y={9.1} width={rodEnd - 60} height={2.3} fill="url(#tc-metal)" stroke="#8b949c" strokeWidth={0.15} />
+          <rect x={rodEnd - 0.2} y={7.9} width={3.4} height={4.7} rx={0.5} fill="#9aa3ab" stroke="#5b636b" strokeWidth={0.2} />
+          {/* barrel (aluminium profile) with end caps */}
+          <rect x={2} y={4.6} width={64} height={11.2} rx={0.8} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <rect x={2} y={7.4} width={64} height={0.5} fill="rgba(0,0,0,.12)" />
+          <rect x={2} y={12.5} width={64} height={0.5} fill="rgba(0,0,0,.12)" />
+          {/* magnetic piston seen through the profile */}
+          <rect x={pistonX} y={5.3} width={4.6} height={9.8} rx={0.6} fill="#3fb6ff" opacity={0.35} />
+          <rect x={2} y={3.8} width={6.6} height={12.8} rx={0.8} fill="#4a4f56" stroke="#2e3237" strokeWidth={0.3} />
+          <rect x={59.4} y={3.8} width={6.6} height={12.8} rx={0.8} fill="#4a4f56" stroke="#2e3237" strokeWidth={0.3} />
+          <text x={34} y={11.2} fontSize={2} textAnchor="middle" fill="#2b2d31" fontFamily="Chakra Petch" fontWeight={700}>
+            {inst.label} · Ø32×{Number(inst.props.stroke ?? 100)}
+          </text>
+          {/* reed switches a0 / a1 clamped on the profile */}
+          {[
+            [15.24, s0, "a0"],
+            [50.8, s1, "a1"],
+          ].map(([x, on, l]) => (
+            <g key={String(l)}>
+              <rect x={Number(x) - 4.6} y={13.8} width={9.2} height={2.6} rx={0.8} fill="#1f5fa8" stroke="#123d70" strokeWidth={0.2} />
+              <IndicatorLed x={Number(x) + 3} y={15.1} on={Boolean(on)} color="#ff3b30" />
+              <text x={Number(x) - 1.6} y={15.6} fontSize={1.3} textAnchor="middle" fill="#fff" fontFamily="Chakra Petch" fontWeight={700}>
+                {String(l)}
+              </text>
+            </g>
+          ))}
+          <Ports def={def} />
         </g>
       );
     }

@@ -5,6 +5,7 @@
  */
 import { useStudio } from "../store";
 import { executeTool, validate } from "./ai";
+import { saveProject } from "./persist";
 
 const KEY = "tconnect.mcpKey";
 const ON = "tconnect.mcpOn";
@@ -75,7 +76,22 @@ function open() {
   es = src;
   // free hosting tiers sleep after ~15 min without incoming requests: keep the server awake while linked
   keepAlive = setInterval(() => void fetch(`/api/bridge/${key}/status`).catch(() => undefined), 4 * 60_000);
-  src.addEventListener("hello", () => setLink({ status: "online" }));
+  src.addEventListener("hello", (e) => {
+    setLink({ status: "online" });
+    // a new version was deployed: reload once so Claude gets the new parts and tools
+    try {
+      const build = (JSON.parse((e as MessageEvent).data) as { build?: string | null }).build;
+      const mine = [...document.querySelectorAll<HTMLScriptElement>("script[src]")].map((x) => x.src).find((x) => /assets\/index-[\w-]+\.js/.test(x));
+      if (build && mine && !mine.endsWith(build) && sessionStorage.getItem("tconnect.reloadedFor") !== build) {
+        sessionStorage.setItem("tconnect.reloadedFor", build);
+        saveProject(useStudio.getState().project);
+        useStudio.getState().toast("New version deployed — reloading…", "info");
+        setTimeout(() => location.reload(), 900);
+      }
+    } catch {
+      /* older server */
+    }
+  });
   src.addEventListener("replaced", () => {
     // another tab took over this key: stop here rather than fight over it
     close();
