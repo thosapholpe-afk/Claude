@@ -251,6 +251,7 @@ export function createPythonGlobals(hal: Hal): Record<string, unknown> {
     constructor(p: unknown) {
       if (p === 4 && board.family === "rp2040") this.temp = true;
       else if (typeof p === "number" && board.family === "rp2040" && p <= 3) this.pinId = hal.pin(26 + p)?.id;
+      else if (p === 0 && board.family === "esp8266") this.pinId = board.pins.find((x) => x.label === "A0")?.id;
       else this.pinId = resolve(p);
       const pin = board.pins.find((x) => x.id === this.pinId);
       if (pin && !pin.caps.includes("adc")) warnOnce(`adc${pin.id}`, `${pin.label} is not an ADC pin on ${board.short}`);
@@ -292,7 +293,7 @@ export function createPythonGlobals(hal: Hal): Record<string, unknown> {
       const us = Math.round(d * 58.3);
       return d > 400 || us > num(timeout) ? -1 : us;
     },
-    freq: () => (board.family === "rp2040" ? 125_000_000 : 240_000_000),
+    freq: () => (board.family === "rp2040" ? 125_000_000 : board.family === "esp8266" ? 80_000_000 : 240_000_000),
     reset: () => {
       throw STOP;
     },
@@ -396,7 +397,7 @@ export function createPythonGlobals(hal: Hal): Record<string, unknown> {
         return true;
       }
       connect() {
-        if (board.family !== "esp32") warnOnce("wifi", `${board.short} has no Wi-Fi radio in this simulator — use an ESP32`);
+        if (!board.wifi) warnOnce("wifi", `${board.short} has no Wi-Fi radio — use an ESP32, ESP8266 or Pico W`);
         hal.wifiStart = hal.nowMs();
       }
       isconnected() {

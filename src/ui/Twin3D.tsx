@@ -2,7 +2,7 @@ import { ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { getBoard } from "../core/boards";
+import { builtinLedId, builtinLedLit, getBoard } from "../core/boards";
 import { buildTopology, endpointPos, footprintOf, instBounds, isBoard, isHost } from "../core/circuit";
 import { getScenario, vibAccel } from "../core/env";
 import { getPart, LED_HEX, type PartLive } from "../core/parts";
@@ -38,8 +38,8 @@ const live = () => useStudio.getState().snap;
 function BoardLive({ board, inst, lift }: { board: BoardDef; inst: PartInstance; lift: number }) {
   const running = useStudio((s) => s.sim.running);
   const ledOn = useStudio((s) => {
-    const id = board.builtinLed ?? (board.family === "rp2040" ? "LED" : "");
-    return !!s.snap?.drives[id]?.level;
+    const id = builtinLedId(board);
+    return !!id && builtinLedLit(board, s.snap?.drives[id]);
   });
   return (
     <Placed inst={inst} w={board.width} h={board.height} lift={lift}>

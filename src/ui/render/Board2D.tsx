@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { boardLook } from "../../core/boards";
 import type { BoardDef, BoardPin, Connector } from "../../core/types";
 
 function shade(hex: string, amt: number) {
@@ -127,6 +128,8 @@ export const Board2D = memo(function Board2D({
 }) {
   const W = board.width;
   const H = board.height;
+  const look = boardLook(board);
+  const radius = look.radius ?? 1.6;
   const strips = headerStrips(board.pins);
   const edgeY = (p: BoardPin) => (p.y < H / 2 ? "top" : "bottom");
   return (
@@ -139,9 +142,9 @@ export const Board2D = memo(function Board2D({
       </defs>
       {!silk && <rect x={0.6} y={1.4} width={W} height={H} rx={2.2} fill="#000" opacity={0.35} filter="url(#tc-soft)" />}
       {silk ? (
-        <path d={pcbOutline(W, H, board.family === "bcm2711" ? 3 : 1.6, board.holes)} fillRule="evenodd" fill={`url(#pcb-${board.id})`} />
+        <path d={pcbOutline(W, H, radius, board.holes)} fillRule="evenodd" fill={`url(#pcb-${board.id})`} />
       ) : (
-        <rect x={0} y={0} width={W} height={H} rx={board.family === "bcm2711" ? 3 : 1.6} fill={`url(#pcb-${board.id})`} stroke={shade(board.pcbColor, 35)} strokeWidth={0.3} />
+        <rect x={0} y={0} width={W} height={H} rx={radius} fill={`url(#pcb-${board.id})`} stroke={shade(board.pcbColor, 35)} strokeWidth={0.3} />
       )}
       {/* fine traces for texture */}
       <g opacity={0.16} stroke={shade(board.pcbColor, 60)} strokeWidth={0.25} fill="none">
@@ -163,15 +166,15 @@ export const Board2D = memo(function Board2D({
         <g key={i}>
           <rect x={c.x + 0.3} y={c.y + 0.5} width={c.w} height={c.h} rx={0.5} fill="#000" opacity={0.3} />
           <rect x={c.x} y={c.y} width={c.w} height={c.h} rx={c.metal ? 0.6 : 0.4} fill={c.metal ? "url(#tc-metal)" : c.color} stroke={c.metal ? "#8c959d" : "#000"} strokeWidth={0.2} />
-          {board.id === "esp32-devkit-v1" && i === 0 && (
+          {c.module && (
             <g>
               <rect x={c.x + 0.6} y={c.y + 0.6} width={c.w - 6.5} height={c.h - 1.2} rx={0.4} fill="#c3c7cc" stroke="#9aa1a8" strokeWidth={0.15} />
-              <text x={c.x + (c.w - 6.5) / 2 + 0.6} y={c.y + c.h / 2 + 0.6} fontSize={1.5} textAnchor="middle" fill="#4b5157" fontFamily="IBM Plex Mono, monospace">
-                ESP-WROOM-32
+              <text x={c.x + (c.w - 6.5) / 2 + 0.6} y={c.y + c.h / 2 + 0.6} fontSize={Math.min(1.5, ((c.w - 7.5) / c.label.length) * 1.6)} textAnchor="middle" fill="#4b5157" fontFamily="IBM Plex Mono, monospace">
+                {c.label}
               </text>
             </g>
           )}
-          {!(board.id === "esp32-devkit-v1" && i === 0) && (
+          {!c.module && (
             <text x={c.x + c.w / 2} y={c.y + c.h / 2 + 0.55} fontSize={Math.min(1.6, c.h * 0.32)} textAnchor="middle" fill={c.metal ? "#4b5157" : "#8d939a"} fontFamily="IBM Plex Mono, monospace">
               {c.label}
             </text>
@@ -220,23 +223,12 @@ export const Board2D = memo(function Board2D({
           );
         })}
       {/* name & status LEDs */}
-      <text
-        x={board.family === "avr" ? W * 0.52 : board.family === "bcm2711" ? W * 0.12 : W * 0.32}
-        y={board.family === "avr" ? H * 0.52 : board.family === "bcm2711" ? H * 0.82 : H * 0.62}
-        fontSize={board.family === "avr" ? 5.5 : board.family === "bcm2711" ? 2.8 : 1.9}
-        fill={board.silkColor}
-        fontFamily="Chakra Petch, sans-serif"
-        fontWeight={700}
-        opacity={0.95}
-        letterSpacing={board.family === "avr" ? 0.6 : 0.1}
-      >
-        {board.family === "avr" ? "UNO R3" : board.family === "bcm2711" ? "Raspberry Pi 4 Model B" : board.family === "rp2040" ? "Pico" : "ESP32 DEVKIT V1"}
+      <text x={look.tx} y={look.ty} fontSize={look.size} fill={board.silkColor} fontFamily="Chakra Petch, sans-serif" fontWeight={700} opacity={0.95} letterSpacing={look.spacing ?? 0.1}>
+        {look.title}
       </text>
-      <StatusLed x={board.family === "avr" ? 52 : board.family === "rp2040" ? 6.2 : board.family === "bcm2711" ? 2.6 : 10.8} y={board.family === "avr" ? 20 : board.family === "rp2040" ? 4.3 : board.family === "bcm2711" ? 47 : 5.2} color="#ff3b30" on={powered} label="PWR" />
-      {board.family !== "bcm2711" && (
-        <StatusLed x={board.family === "avr" ? 52 : board.family === "rp2040" ? 6.2 : 10.8} y={board.family === "avr" ? 23.6 : board.family === "rp2040" ? 16.6 : 22.6} color={board.family === "esp32" ? "#2f8bff" : "#7cff5b"} on={ledOn} label={board.family === "avr" ? "L" : "LED"} />
-      )}
-      {board.family === "bcm2711" && <StatusLed x={2.6} y={51} color="#7cff5b" on={powered && ledOn} label="ACT" />}
+      {look.leds.map((l, i) => (
+        <StatusLed key={i} x={l.x} y={l.y} color={l.color} on={l.role === "pwr" ? powered : l.role === "act" ? powered && ledOn : ledOn} label={l.label} />
+      ))}
     </g>
   );
 });

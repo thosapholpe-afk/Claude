@@ -49,4 +49,20 @@ describe("mounting boards", () => {
     expect(strip.nodeOf.get(epKey("P", "X1Y2"))).toBe(strip.nodeOf.get(epKey("P", "X9Y2")));
     expect(strip.nodeOf.get(epKey("P", "X1Y2"))).not.toBe(strip.nodeOf.get(epKey("P", "X1Y3")));
   });
+
+  it.each([
+    ["arduino-nano", 30],
+    ["esp32-s3-devkitc", 44],
+    ["nodemcu-esp8266", 30],
+    ["rpi-pico-w", 40],
+  ])("plugs every %s pin into a breadboard", (id, n) => {
+    const { topo } = mounted(id as string, "breadboard");
+    expect(topo.inserted.filter((i) => i.part === "board").length).toBe(n);
+  });
+
+  it("refuses boards with female headers (Mega)", () => {
+    const plan = planMount(boardInst("arduino-mega"), "breadboard");
+    expect(plan.ok).toBe(false);
+    expect(plan.reason).toMatch(/female headers/);
+  });
 });

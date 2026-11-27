@@ -1,4 +1,4 @@
-import { getBoard } from "./boards";
+import { boardHeaders, getBoard } from "./boards";
 import { BB_ROWS, layoutBreadboard } from "./parts";
 import type { BoardDef, BoardPin, PartInstance } from "./types";
 
@@ -29,11 +29,12 @@ function lattice(board: BoardDef) {
 
 export function planMount(boardInst: PartInstance, kind: "breadboard" | "perfboard"): MountPlan {
   const board = getBoard(boardInst.type.slice(6));
+  const style = boardHeaders(board);
+  if (style === "female-up") return { ok: false, reason: `The ${board.short} has female headers on top — wire it to the board instead, or stack a proto shield.` };
   const lat = lattice(board);
   if (!lat) {
     return { ok: false, reason: `${board.short} headers are not on a 2.54 mm grid (the Uno's digital header has a 0.16″ gap) — it can't plug into ${kind === "breadboard" ? "a breadboard" : "a perfboard"}.` };
   }
-  if (board.family === "avr") return { ok: false, reason: "The Uno R3 has female headers on top — wire it to the board instead, or stack a proto shield." };
   const minC = Math.min(...lat.cells.map((x) => x.c));
   const maxC = Math.max(...lat.cells.map((x) => x.c));
   const minR = Math.min(...lat.cells.map((x) => x.r));

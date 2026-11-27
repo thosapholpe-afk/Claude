@@ -62,7 +62,7 @@ export function choosePin(
   const score = (p: BoardPin) => {
     let s = 0;
     if (p.avoid) s += 1000;
-    if (board.family === "esp32" && need === "adc" && !(p.gpio! >= 32 && p.gpio! <= 39)) s += 400; // ADC2 conflicts with Wi-Fi
+    if (need === "adc" && p.adc2) s += 400; // ADC2 conflicts with Wi-Fi
     if (!outputs && p.inputOnly) s -= 50; // use input-only pins for sensors first
     if (near && boardInst) {
       const pos = endpointPos(project.parts, boardInst.id, p.id);

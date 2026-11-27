@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getBoard } from "../core/boards";
+import { getBoard, builtinLedId, builtinLedLit } from "../core/boards";
 import { BOARD_ID, endpointPos, footprintOf, instBounds, isBoard, isHost, pinWorld } from "../core/circuit";
 import { getPart } from "../core/parts";
 import { engine } from "../core/sim";
@@ -392,8 +392,8 @@ export function Canvas() {
             const live = snapState?.live[inst.id];
             const def = isBoard(inst) ? null : getPart(inst.type);
             const bnd = instBounds(inst);
-            const builtin = board.builtinLed ?? (board.family === "rp2040" ? "LED" : undefined);
-            const ledOn = !!(builtin && snapState?.drives[builtin]?.level);
+            const builtin = builtinLedId(board);
+            const ledOn = !!builtin && builtinLedLit(board, snapState?.drives[builtin]);
             return (
               <g key={inst.id} data-id={inst.id} className={`part ${sel ? "is-selected" : ""}`} onPointerDown={(e) => onPointerDownPart(e, inst)}>
                 <g transform={`translate(${inst.x} ${inst.y}) rotate(${inst.rot} ${cx} ${cy})`}>

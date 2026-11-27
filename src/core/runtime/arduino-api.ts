@@ -155,7 +155,7 @@ export function createArduinoGlobals(hal: Hal): Record<string, unknown> {
     if (!pin) warnOnce(`pin${String(p)}`, `Pin ${String(p)} does not exist on ${board.short}`);
     return pin?.id;
   };
-  let adcBits = board.family === "esp32" ? 12 : 10;
+  let adcBits = board.family === "esp32" ? 12 : 10; // Arduino default resolution (Pico/ESP8266: 10-bit)
   let pwmBits = 8;
   const ledcChannels = new Map<number, { pin?: string; freq: number; bits: number }>();
   const ledcPins = new Map<string, { freq: number; bits: number }>();
@@ -486,12 +486,12 @@ export function createArduinoGlobals(hal: Hal): Record<string, unknown> {
   }
 
   // ----------------------------------------------------------------- WiFi / MQTT
-  const isWifiBoard = board.family === "esp32";
+  const isWifiBoard = !!board.wifi;
   const WiFi = {
     mode: () => undefined,
     begin: (ssid?: unknown) => {
       if (!isWifiBoard) {
-        warnOnce("wifi", `${board.short} has no Wi-Fi radio — use an ESP32`);
+        warnOnce("wifi", `${board.short} has no Wi-Fi radio — use an ESP32, ESP8266 or Pico W`);
         return;
       }
       hal.wifiStart = hal.nowMs();

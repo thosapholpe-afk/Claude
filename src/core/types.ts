@@ -36,6 +36,8 @@ export interface BoardPin {
   inputOnly?: boolean;
   /** Reserved / strapping / boot-sensitive pins are avoided by auto-wiring. */
   avoid?: string;
+  /** ESP32 ADC2 channel: unusable while Wi-Fi is on. */
+  adc2?: boolean;
 }
 
 export type ConnectorKind =
@@ -75,6 +77,22 @@ export interface Chip {
   color: string;
   z: number;
   metal?: boolean;
+  /** Radio module (shielded can on a substrate), e.g. ESP-WROOM-32. */
+  module?: boolean;
+}
+
+/** How a board's pins come out: male pins under the PCB, female sockets on top, or male pins on top. */
+export type HeaderStyle = "male-down" | "female-up" | "male-up";
+
+/** Silkscreen title and indicator LEDs, for drawing. */
+export interface BoardLook {
+  title: string;
+  tx: number;
+  ty: number;
+  size: number;
+  spacing?: number;
+  radius?: number;
+  leds: { x: number; y: number; color: string; label: string; role: "pwr" | "user" | "act" }[];
 }
 
 export interface BoardDef {
@@ -83,7 +101,7 @@ export interface BoardDef {
   short: string;
   vendor: string;
   mcu: string;
-  family: "esp32" | "avr" | "rp2040" | "bcm2711";
+  family: "esp32" | "esp8266" | "avr" | "rp2040" | "bcm2711";
   width: number;
   height: number;
   thickness: number;
@@ -107,6 +125,12 @@ export interface BoardDef {
   notes: string[];
   /** Tallest component above the PCB (case design). */
   maxComponentZ: number;
+  headers?: HeaderStyle;
+  look?: BoardLook;
+  /** Has a Wi-Fi radio the simulator can use. */
+  wifi?: boolean;
+  /** The built-in LED lights when its pin is LOW (ESP8266 boards). */
+  builtinActiveLow?: boolean;
 }
 
 export type PinRole =

@@ -8,10 +8,11 @@ import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as THREE from "three";
 import { footprintOf, isBoard, isHost } from "../../core/circuit";
-import type { BoardDef, Connector, PartInstance } from "../../core/types";
+import type { BoardDef, Connector, HeaderStyle, PartInstance } from "../../core/types";
 import { Board2D, headerStrips, SvgDefs } from "../render/Board2D";
 import { Part2D } from "../render/Parts2D";
 import { getPart } from "../../core/parts";
+import { boardHeaders, boardLook } from "../../core/boards";
 
 // ---------------------------------------------------------------------------
 // textures
@@ -85,8 +86,7 @@ function useLabelTexture(text: string, fg: string, bg: string, w: number, h: num
 // ---------------------------------------------------------------------------
 // board geometry helpers
 // ---------------------------------------------------------------------------
-export type HeaderStyle = "male-down" | "female-up" | "male-up";
-export const headerStyle = (b: BoardDef): HeaderStyle => (b.family === "avr" ? "female-up" : b.family === "bcm2711" ? "male-up" : "male-down");
+export const headerStyle = (b: BoardDef): HeaderStyle => boardHeaders(b);
 export const SPACER = 2.5; // header plastic height
 export const PIN_BELOW = 6; // male pin length below the plastic
 
@@ -166,7 +166,7 @@ function Headers({ board }: { board: BoardDef }) {
 
 function Chip({ c, isModule, board }: { c: BoardDef["chips"][number]; isModule: boolean; board: BoardDef }) {
   const t = board.thickness;
-  const label = useLabelTexture(isModule ? "ESP-WROOM-32" : c.label, c.metal ? "#5a6168" : "#a9adb2", c.metal ? "#c3c8cd" : "#1b1c1f", c.w, c.h);
+  const label = useLabelTexture(c.label, c.metal ? "#5a6168" : "#a9adb2", c.metal ? "#c3c8cd" : "#1b1c1f", c.w, c.h);
   const legs = useMemo(() => {
     if (c.metal || isModule) return [];
     const out: { x: number; y: number; z: number; rot?: number }[] = [];
@@ -384,11 +384,7 @@ function Smd({ board }: { board: BoardDef }) {
 
 function StatusLeds({ board, powered, ledOn }: { board: BoardDef; powered: boolean; ledOn: boolean }) {
   const t = board.thickness;
-  const f = board.family;
-  const leds = [
-    { x: f === "avr" ? 52 : f === "rp2040" ? 6.2 : f === "bcm2711" ? 2.6 : 10.8, z: f === "avr" ? 20 : f === "rp2040" ? 4.3 : f === "bcm2711" ? 47 : 5.2, color: "#ff3b30", on: powered },
-    { x: f === "avr" ? 52 : f === "rp2040" ? 6.2 : f === "bcm2711" ? 2.6 : 10.8, z: f === "avr" ? 23.6 : f === "rp2040" ? 16.6 : f === "bcm2711" ? 51 : 22.6, color: f === "esp32" ? "#2f8bff" : "#7cff5b", on: ledOn },
-  ];
+  const leds = boardLook(board).leds.map((l) => ({ x: l.x, z: l.y, color: l.color, on: l.role === "pwr" ? powered : l.role === "act" ? powered && ledOn : ledOn }));
   return (
     <group>
       {leds.map((l, i) => (
@@ -410,7 +406,7 @@ export function BoardModel({ board, powered = false, ledOn = false }: { board: B
   const W = board.width;
   const H = board.height;
   const pcbGeo = useMemo(() => {
-    const r = board.family === "bcm2711" ? 3 : 1.6;
+    const r = boardLook(board).radius ?? 1.6;
     const s = new THREE.Shape();
     s.moveTo(r, 0);
     s.lineTo(W - r, 0);
@@ -445,7 +441,7 @@ export function BoardModel({ board, powered = false, ledOn = false }: { board: B
       )}
       <Headers board={board} />
       {board.chips.map((c, i) => (
-        <Chip key={i} c={c} board={board} isModule={board.id === "esp32-devkit-v1" && i === 0} />
+        <Chip key={i} c={c} board={board} isModule={!!c.module} />
       ))}
       {board.connectors.map((c) => (
         <ConnectorModel key={c.id} c={c} board={board} />

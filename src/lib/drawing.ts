@@ -1,3 +1,4 @@
+import { boardLook } from "../core/boards";
 import type { BoardDef } from "../core/types";
 import type { PartDef } from "../core/parts";
 
@@ -23,7 +24,7 @@ export function specFromBoard(b: BoardDef): DrawingSpec {
     height: b.height,
     thickness: b.thickness,
     maxZ: b.maxComponentZ,
-    corner: b.family === "bcm2711" ? 3 : 1.6,
+    corner: boardLook(b).radius ?? 1.6,
     holes: b.holes,
     rects: b.connectors.filter((c) => c.kind !== "antenna").map((c) => ({ x: c.x, y: c.y, w: c.w, h: c.h, label: c.label, z: c.z })),
     pins: b.pins.map((p) => ({ x: p.x, y: p.y, label: p.label })),

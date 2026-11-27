@@ -1,4 +1,4 @@
-import { getBoard } from "./boards";
+import { BOARDS, getBoard } from "./boards";
 import { BOARD_ID, endpointPos } from "./circuit";
 import { defaultScenarioState } from "./env";
 import { getPart } from "./parts";
@@ -29,6 +29,11 @@ export interface Template {
   wiring: [string, string][];
   code: Partial<Record<Lang, CodeGen>>;
 }
+
+/** Boards with at least `n` analog inputs (the Pi 4 has none). */
+const withAdc = (n = 1) => BOARDS.filter((b) => b.pins.filter((p) => p.caps.includes("adc")).length >= n).map((b) => b.id);
+const MCU_BOARDS = BOARDS.filter((b) => b.family !== "bcm2711").map((b) => b.id);
+const WIFI_MCUS = BOARDS.filter((b) => b.wifi && b.family !== "bcm2711").map((b) => b.id);
 
 const servoInclude = (b: BoardDef) => (b.family === "esp32" ? "#include <ESP32Servo.h>" : "#include <Servo.h>");
 
@@ -170,7 +175,7 @@ while True:
     thai: "เซอร์โว MG996R คุมด้วยโพเทนชิโอ",
     description: "A potentiometer sets the angle of a high-torque MG996R servo.",
     icon: "gauge",
-    boards: ["esp32-devkit-v1", "arduino-uno", "rpi-pico"],
+    boards: withAdc(1),
     parts: [
       { id: "S1", type: "servo-mg996r", label: "SERVO1", dx: 26, dy: -4 },
       { id: "P1", type: "pot", label: "POT1", dx: 26, dy: 30, props: { position: 0.3 } },
@@ -389,7 +394,7 @@ while True:
     thai: "ตรวจจับน้ำรั่ว / น้ำท่วม",
     description: "Water level sensor plus buzzer. Run it in the flood scenario.",
     icon: "droplets",
-    boards: ["esp32-devkit-v1", "arduino-uno", "rpi-pico"],
+    boards: withAdc(1),
     scenario: "flood",
     parts: [
       { id: "W1", type: "water", label: "WATER1", dx: 26, dy: -20 },
@@ -588,7 +593,7 @@ pause()
     thai: "สถานีวัดอากาศ + จอ LCD",
     description: "DHT22 temperature and humidity on a 16×2 I²C display.",
     icon: "thermometer",
-    boards: ["esp32-devkit-v1", "arduino-uno", "rpi-pico"],
+    boards: MCU_BOARDS,
     scenario: "cold-storage",
     parts: [
       { id: "D1", type: "dht22", label: "DHT1", dx: 26, dy: -16 },
@@ -663,7 +668,7 @@ while True:
     thai: "วิเคราะห์การสั่นของมอเตอร์",
     description: "ADXL335 on a motor streams X/Y/Z at 200 Hz for the plotter, FFT and historian.",
     icon: "waves",
-    boards: ["esp32-devkit-v1", "arduino-uno", "rpi-pico"],
+    boards: withAdc(3),
     scenario: "motor-vibration",
     scenarioParams: { rpm: 1480, fault: "imbalance" },
     parts: [{ id: "A1", type: "adxl335", label: "ACC1", dx: 26, dy: -8 }],
@@ -776,7 +781,7 @@ while True:
     thai: "ส่งค่าเซนเซอร์ขึ้น MQTT",
     description: "ESP32 publishes DHT22 readings over Wi-Fi/MQTT and listens for LED commands.",
     icon: "wifi",
-    boards: ["esp32-devkit-v1"],
+    boards: WIFI_MCUS,
     parts: [
       { id: "D1", type: "dht22", label: "DHT1", dx: 26, dy: -16 },
       { id: "L1", type: "led", label: "LED1", dx: 50, dy: 12, props: { color: "blue" } },
@@ -789,7 +794,7 @@ while True:
       ["L1.C", "@gnd"],
     ],
     code: {
-      arduino: (p) => `#include <WiFi.h>
+      arduino: (p, b) => `#include <${b.family === "esp8266" ? "ESP8266WiFi.h" : "WiFi.h"}>
 #include <PubSubClient.h>
 #include <DHT.h>
 
