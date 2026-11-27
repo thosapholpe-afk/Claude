@@ -1,7 +1,7 @@
 /* ==========================================================================
    Thosaphol Connect — tokens
    Graphite surfaces with a pastel sage → champagne → peach gradient accent,
-   spaced serif wordmark, geometric sans display type.
+   clean sans wordmark, geometric sans display type.
    ========================================================================== */
 :root {
   color-scheme: dark;
@@ -47,7 +47,7 @@
   --radius: 12px;
   --radius-sm: 9px;
   --font-display: "Prompt", "IBM Plex Sans Thai", system-ui, sans-serif;
-  --font-brand: "Cormorant Garamond", Georgia, serif;
+  --font-brand: "Inter", "IBM Plex Sans Thai", system-ui, sans-serif;
   --font-ui: "IBM Plex Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -539,10 +539,9 @@ input[type="checkbox"] {
 }
 .wordmark {
   font-family: var(--font-brand);
-  font-weight: 600;
+  font-weight: 700;
   font-size: 15px;
-  letter-spacing: 0.26em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .proj-name {
@@ -2577,8 +2576,9 @@ input[type="checkbox"] {
   gap: 28px;
   padding-right: 28px;
   font-family: var(--font-brand);
-  font-size: 22px;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.01em;
   color: var(--text-2);
   white-space: nowrap;
 }
@@ -2633,9 +2633,9 @@ input[type="checkbox"] {
   box-shadow: 0 30px 70px rgba(8, 8, 10, 0.38);
 }
 .how-card .step {
-  font-family: var(--font-brand);
-  font-size: 15px;
-  letter-spacing: 0.2em;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
   color: var(--text-3);
 }
 .how-card .how-icon {
