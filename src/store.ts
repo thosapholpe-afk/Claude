@@ -43,7 +43,7 @@ export const DEFAULT_CASE: CaseParams = {
   connectorCutouts: true,
   includeBreadboard: false,
   features: [],
-  label: "XTwin",
+  label: "Thosaphol Connect",
 };
 
 export const DEFAULT_MQTT: MqttConfig = {
@@ -51,7 +51,7 @@ export const DEFAULT_MQTT: MqttConfig = {
   clientId: `xtwin-${Math.random().toString(16).slice(2, 8)}`,
   username: "",
   password: "",
-  prefix: "xtwin/demo",
+  prefix: "thosaphol/demo",
   intervalMs: 1000,
   retain: false,
   qos: 0,

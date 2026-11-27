@@ -538,10 +538,10 @@ export function ProjectsModal() {
           </button>
         ))}
         <label className="btn sm">
-          <Upload size={13} /> Import .xtwin
+          <Upload size={13} /> Import project
           <input
             type="file"
-            accept=".json,.xtwin"
+            accept=".json,.tcproj,.xtwin"
             hidden
             onChange={async (e) => {
               const f = e.target.files?.[0];
@@ -550,12 +550,12 @@ export function ProjectsModal() {
                 setProject(JSON.parse(await f.text()));
                 set("modal", null);
               } catch {
-                useStudio.getState().toast("That file is not an XTwin project", "err");
+                useStudio.getState().toast("That file is not an Thosaphol Connect project", "err");
               }
             }}
           />
         </label>
-        <button className="btn sm" onClick={() => download(`${cur.name.replace(/\W+/g, "_")}.xtwin`, JSON.stringify(cur, null, 2), "application/json")}>
+        <button className="btn sm" onClick={() => download(`${cur.name.replace(/\W+/g, "_")}.tcproj`, JSON.stringify(cur, null, 2), "application/json")}>
           Export current
         </button>
       </div>

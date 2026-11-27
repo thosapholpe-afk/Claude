@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "XTwin \u2014 digital twin platform for simulating ESP32, Arduino and Raspberry Pi circuits",
+  "description": "Thosaphol Connect \u2014 digital twin platform for simulating ESP32, Arduino and Raspberry Pi circuits",
   "scripts": {
     "dev": "concurrently -k -n web,api -c green,cyan \"vite\" \"tsx watch server/index.ts\"",
     "dev:web": "vite",

@@ -1,5 +1,5 @@
 /**
- * XTwin API server
+ * Thosaphol Connect API server
  *  - OAuth sign-in: Google, GitHub, Facebook, Instagram (server-side code flow)
  *  - Signed session cookie, JSON-file user store
  *  - Display-name onboarding, recorded to a Google Form

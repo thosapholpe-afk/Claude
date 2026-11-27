@@ -616,7 +616,7 @@ void setup() {
   dht.begin();
   lcd.init();
   lcd.backlight();
-  lcd.print("XTwin weather");
+  lcd.print("TC Weather");
   delay(1000);
 }
 
@@ -793,7 +793,7 @@ while True:
 #include <PubSubClient.h>
 #include <DHT.h>
 
-const char* SSID = "XTwin-Sim";
+const char* SSID = "Thosaphol-Sim";
 const char* PASS = "simulated";
 const char* BROKER = "broker.hivemq.com";
 
@@ -823,7 +823,7 @@ void setup() {
   mqtt.setServer(BROKER, 1883);
   mqtt.setCallback(onMessage);
   while (!mqtt.connect("xtwin-esp32")) delay(500);
-  mqtt.subscribe("xtwin/demo/led");
+  mqtt.subscribe("thosaphol/demo/led");
   Serial.println("MQTT connected");
 }
 
@@ -832,7 +832,7 @@ void loop() {
   float t = dht.readTemperature();
   float h = dht.readHumidity();
   String json = "{\\"temp\\":" + String(t, 1) + ",\\"hum\\":" + String(h, 1) + "}";
-  mqtt.publish("xtwin/demo/dht", json.c_str());
+  mqtt.publish("thosaphol/demo/dht", json.c_str());
   Serial.println(json);
   delay(2000);
 }
@@ -843,7 +843,7 @@ from umqtt.simple import MQTTClient
 
 wlan = network.WLAN(network.STA_IF)
 wlan.active(True)
-wlan.connect("XTwin-Sim", "simulated")
+wlan.connect("Thosaphol-Sim", "simulated")
 while not wlan.isconnected():
     utime.sleep_ms(250)
 print("Wi-Fi", wlan.ifconfig()[0])
@@ -858,11 +858,11 @@ def on_msg(topic, msg):
 c = MQTTClient("xtwin-esp32", "broker.hivemq.com")
 c.set_callback(on_msg)
 c.connect()
-c.subscribe("xtwin/demo/led")
+c.subscribe("thosaphol/demo/led")
 
 while True:
     sensor.measure()
-    c.publish("xtwin/demo/dht", '{"temp":%.1f,"hum":%.1f}' % (sensor.temperature(), sensor.humidity()))
+    c.publish("thosaphol/demo/dht", '{"temp":%.1f,"hum":%.1f}' % (sensor.temperature(), sensor.humidity()))
     c.check_msg()
     utime.sleep(2)
 `,

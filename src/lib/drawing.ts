@@ -109,7 +109,7 @@ export function drawingSvg(s: DrawingSpec, opts: { showPins?: boolean } = {}): s
   out.push(`<rect x="${W - 92}" y="${ty - 8}" width="86" height="16" fill="none" stroke="${ink}" stroke-width="0.3"/>`);
   out.push(`<text x="${W - 89}" y="${ty - 2.5}" font-size="3" font-weight="700">${esc(s.title)}</text>`);
   out.push(`<text x="${W - 89}" y="${ty + 2}" font-size="1.9" fill="#444">${esc(s.subtitle).slice(0, 70)}</text>`);
-  out.push(`<text x="${W - 89}" y="${ty + 5.8}" font-size="1.9" fill="#444">Units mm · scale 1:1 · datum bottom-left · XTwin ${new Date().toISOString().slice(0, 10)}</text>`);
+  out.push(`<text x="${W - 89}" y="${ty + 5.8}" font-size="1.9" fill="#444">Units mm · scale 1:1 · datum bottom-left · Thosaphol Connect ${new Date().toISOString().slice(0, 10)}</text>`);
   out.push(`</svg>`);
   return out.join("\n");
 }

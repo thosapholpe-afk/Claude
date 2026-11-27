@@ -1,4 +1,4 @@
-// Core data model for XTwin. All geometry is in millimetres.
+// Core data model for Thosaphol Connect. All geometry is in millimetres.
 
 export type Lang = "arduino" | "micropython" | "python";
 

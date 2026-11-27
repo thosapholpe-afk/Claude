@@ -41,7 +41,7 @@ const STARTER: Record<Lang, string> = {
 }
 
 void loop() {
-  Serial.println("Hello from XTwin");
+  Serial.println("Hello from Thosaphol Connect");
   delay(1000);
 }
 `,
@@ -49,13 +49,13 @@ void loop() {
 import utime
 
 while True:
-    print("Hello from XTwin")
+    print("Hello from Thosaphol Connect")
     utime.sleep(1)
 `,
   python: `from time import sleep
 
 while True:
-    print("Hello from XTwin")
+    print("Hello from Thosaphol Connect")
     sleep(1)
 `,
 };

@@ -94,7 +94,7 @@ function TopBar() {
     <header className="topbar">
       <div className="brand">
         <Logo />
-        <span className="wordmark">XTwin</span>
+        <span className="wordmark">Thosaphol Connect</span>
       </div>
       <input className="proj-name" value={project.name} onChange={(e) => st.commit((p) => ({ ...p, name: e.target.value }), false)} aria-label="Project name" />
       <span className="saved muted small">Saved locally</span>

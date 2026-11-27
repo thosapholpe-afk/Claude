@@ -507,7 +507,7 @@ export function createArduinoGlobals(hal: Hal): Record<string, unknown> {
       hal.wifiStart = null;
     },
     setHostname: () => undefined,
-    SSID: () => "XTwin-Sim",
+    SSID: () => "Thosaphol-Sim",
   };
   class WiFiClient {}
   class WiFiClientSecure {

@@ -1,6 +1,6 @@
-# XTwin — digital twin สำหรับวงจร ESP32 · Arduino · Raspberry Pi
+# Thosaphol Connect — digital twin สำหรับวงจร ESP32 · Arduino · Raspberry Pi
 
-XTwin เป็นแพลตฟอร์มจำลองวงจรไมโครคอนโทรลเลอร์บนเว็บ (แนวเดียวกับ Wokwi / Tinkercad) ที่ต่อยอดเป็น **digital twin**:
+Thosaphol Connect เป็นแพลตฟอร์มจำลองวงจรไมโครคอนโทรลเลอร์บนเว็บ (แนวเดียวกับ Wokwi / Tinkercad) ที่ต่อยอดเป็น **digital twin**:
 รันเฟิร์มแวร์จริงในเบราว์เซอร์ คำนวณแรงดัน/กระแสจริงด้วย circuit solver แล้ว “โยนบอร์ดเข้าไปในสถานการณ์” เช่น ตึกไฟไหม้ น้ำท่วม มอเตอร์สั่น
 พร้อม AI copilot ที่สั่งงานเป็นภาษาไทยได้ ส่งข้อมูลออก MQTT ส่งออกแบบ drawing และสร้างเคส STL
 

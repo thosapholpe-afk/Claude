@@ -144,7 +144,7 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
             <path d="M8 9l6.5 7L8 23M24 9l-6.5 7L24 23" stroke="var(--accent)" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
             <circle cx="16" cy="16" r="1.8" fill="var(--accent)" />
           </svg>
-          <span className="wordmark">XTwin</span>
+          <span className="wordmark">Thosaphol Connect</span>
         </div>
         <nav className="land-nav">
           <a href="#how">How it works</a>
@@ -204,7 +204,7 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
           <p>Export true-scale board drawings in SVG and DXF, and generate a printable enclosure as STL — ventilated, waterproof or with mounting ears.</p>
         </div>
       </section>
-      <footer className="land-foot muted small">XTwin · built for makers, students and engineers</footer>
+      <footer className="land-foot muted small">Thosaphol Connect · built for makers, students and engineers</footer>
     </div>
   );
 }
@@ -236,7 +236,7 @@ export function Onboarding({ user, onDone }: { user: User; onDone: (u: User) => 
         }}
       >
         <header>
-          <h2>Welcome to XTwin</h2>
+          <h2>Welcome to Thosaphol Connect</h2>
         </header>
         <p className="muted">Choose the name other people will see on your projects.</p>
         <label className="field">
