@@ -18,6 +18,11 @@ export interface EnvState {
   vibFreq: number; // Hz shaft speed
   vibFault: VibFault;
   shake: number; // 0..1 visual shake amount (earthquake etc.)
+  pressure: number; // hPa (barometric)
+  rain: number; // 0..1 rain intensity on an exposed plate
+  co2: number; // ppm (air quality)
+  magnet: number; // mT magnetic flux density at a Hall sensor
+  heartRate: number; // bpm at a pulse sensor
 }
 
 export const ENV_DEFAULT: EnvState = {
@@ -36,6 +41,11 @@ export const ENV_DEFAULT: EnvState = {
   vibFreq: 0,
   vibFault: "none",
   shake: 0,
+  pressure: 1013.25,
+  rain: 0,
+  co2: 420,
+  magnet: 0,
+  heartRate: 72,
 };
 
 export interface EnvVarSpec {
@@ -61,6 +71,11 @@ export const ENV_VARS: EnvVarSpec[] = [
   { key: "motion", label: "Motion", unit: "", min: 0, max: 1, step: 1 },
   { key: "vibRms", label: "Vibration", unit: "g", min: 0, max: 4, step: 0.01 },
   { key: "vibFreq", label: "Shaft speed", unit: "Hz", min: 0, max: 100, step: 0.5 },
+  { key: "pressure", label: "Air pressure", unit: "hPa", min: 300, max: 1100, step: 0.5 },
+  { key: "rain", label: "Rain", unit: "", min: 0, max: 1, step: 0.01 },
+  { key: "co2", label: "CO₂ / air quality", unit: "ppm", min: 400, max: 10000, step: 10 },
+  { key: "magnet", label: "Magnetic field", unit: "mT", min: -100, max: 100, step: 1 },
+  { key: "heartRate", label: "Heart rate", unit: "bpm", min: 30, max: 200, step: 1 },
 ];
 
 export const ENV_KEY_FOR: Record<EnvKey, keyof EnvState> = {
@@ -76,6 +91,11 @@ export const ENV_KEY_FOR: Record<EnvKey, keyof EnvState> = {
   distance: "distance",
   motion: "motion",
   vibration: "vibRms",
+  pressure: "pressure",
+  rain: "rain",
+  co2: "co2",
+  magnet: "magnet",
+  heartRate: "heartRate",
 };
 
 export interface ScenarioDef {
@@ -132,6 +152,7 @@ export const SCENARIOS: ScenarioDef[] = [
         temperature: lerp(26, 26 + 95 * s.intensity, smooth((t - 6) / (s.duration * 1.2))),
         smoke: lerp(5, 3200 * s.intensity, smooth((t - 5) / s.duration)),
         gas: lerp(120, 900 * s.intensity, smooth((t - 8) / s.duration)),
+        co2: lerp(420, 420 + 7000 * s.intensity, smooth((t - 4) / s.duration)),
         humidity: lerp(55, 22, k),
         lux: 420 + 1600 * k * flick,
         sound: 38 + 42 * k,
@@ -151,6 +172,7 @@ export const SCENARIOS: ScenarioDef[] = [
       const k = smooth(t / s.duration) * s.intensity * maxL;
       return {
         water: clamp(k + 0.015 * Math.sin(t * 2.2), 0, 1),
+        rain: clamp(0.35 + 0.5 * s.intensity + 0.12 * vnoise(t * 0.8, 9), 0, 1),
         humidity: lerp(55, 98, k * 1.4),
         soil: lerp(0.35, 1, k * 1.2),
         temperature: lerp(26, 23, k),
@@ -199,6 +221,29 @@ export const SCENARIOS: ScenarioDef[] = [
         lux: 0.5 + 60000 * s.intensity * Math.pow(elev, 1.6) + 20 * sun,
         temperature: 24 + 9 * elev,
         humidity: 75 - 25 * elev,
+      };
+    },
+  },
+  {
+    id: "storm",
+    name: "Thunderstorm",
+    thai: "พายุฝนฟ้าคะนอง",
+    description: "Pressure falls, rain sets in and lightning flashes — a weather-station test.",
+    keywords: ["storm", "rain", "weather", "thunder", "lightning", "pressure", "พายุ", "ฝน", "ฟ้าผ่า", "ฟ้าร้อง", "ความกดอากาศ", "สภาพอากาศ"],
+    defaultDuration: 45,
+    sample: (t, s) => {
+      const k = smooth(t / s.duration) * s.intensity;
+      const gust = 0.5 + 0.5 * vnoise(t * 0.9, 21);
+      const strike = Math.pow(Math.max(0, vnoise(t * 2.3, 33)), 18) * k;
+      return {
+        pressure: lerp(1011, 1011 - 30 * s.intensity, smooth(t / (s.duration * 0.8))),
+        rain: clamp(smooth((t - 4) / (s.duration * 0.5)) * s.intensity * (0.75 + 0.25 * gust), 0, 1),
+        humidity: lerp(62, 97, k * 1.3),
+        temperature: lerp(31, 24, k),
+        lux: lerp(30000, 900, k) + 80000 * strike,
+        sound: 40 + 28 * k + 45 * strike,
+        water: clamp(k * 0.35, 0, 1),
+        soil: lerp(0.3, 0.95, k),
       };
     },
   },

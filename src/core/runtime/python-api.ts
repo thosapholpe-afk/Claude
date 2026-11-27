@@ -274,14 +274,22 @@ export function createPythonGlobals(hal: Hal): Record<string, unknown> {
     atten() {}
     width() {}
   }
+  const i2cScan = () => {
+    const DEF: Record<string, string> = { lcd1602: "0x27", bme280: "0x76", bh1750: "0x23" };
+    return Object.keys(DEF)
+      .map((t) => {
+        const p = hal.findI2C([t]);
+        return p ? parseInt(String(p.props.address ?? DEF[t]), 16) : -1;
+      })
+      .filter((a) => a >= 0);
+  };
   const machine = {
     Pin,
     PWM,
     ADC,
     I2C: class {
       scan() {
-        const p = hal.findI2C(["lcd1602"]);
-        return p ? [parseInt(String(p.props.address ?? "0x27"), 16)] : [];
+        return i2cScan();
       }
     },
     time_pulse_us: (pin: unknown, _level: unknown = 1, timeout: unknown = 1_000_000) => {
@@ -938,9 +946,141 @@ export function createPythonGlobals(hal: Hal): Record<string, unknown> {
     },
   };
   (adafruit_dht as Record<string, unknown>).DHT11 = adafruit_dht.DHT22;
-  const boardMod: Record<string, number> = {};
+  const boardMod: Record<string, unknown> = {};
   for (let i = 0; i <= 27; i++) boardMod[`D${i}`] = i;
-  Object.assign(boardMod, { SDA: 2, SCL: 3 });
+  Object.assign(boardMod, { SDA: 2, SCL: 3, I2C: () => ({ scan: i2cScan, try_lock: () => true, unlock: () => undefined }) });
+
+  // ------------------------------------------------------------- I²C / 1-Wire sensors
+  const i2cPart = (type: string) => hal.findI2C([type]);
+  const noDev = (what: string) => new PyError("OSError", `[Errno 19] ENODEV — ${what} not found on the I2C bus`);
+  const bmeRead = () => {
+    const p = i2cPart("bme280");
+    if (!p) throw noDev("BME280");
+    const e = hal.env();
+    const t = Math.round((e.temperature + (Math.random() - 0.5) * 0.04) * 100) / 100;
+    const pa = Math.round((e.pressure + (Math.random() - 0.5) * 0.04) * 100 * 100) / 100;
+    const h = p.props.model === "BMP280" ? 0 : Math.round(Math.max(0, Math.min(100, e.humidity)) * 100) / 100;
+    return { t, pa, h };
+  };
+  class MPBME280 {
+    constructor(..._a: unknown[]) {
+      bmeRead();
+    }
+    get values() {
+      const r = bmeRead();
+      return [`${r.t.toFixed(2)}C`, `${(r.pa / 100).toFixed(2)}hPa`, `${r.h.toFixed(2)}%`];
+    }
+    get temperature() {
+      return this.values[0];
+    }
+    get pressure() {
+      return this.values[1];
+    }
+    get humidity() {
+      return this.values[2];
+    }
+    read_compensated_data() {
+      const r = bmeRead();
+      return [r.t, r.pa, r.h];
+    }
+  }
+  const bme280 = { BME280: MPBME280 };
+  class MPBH1750 {
+    static CONT_HIRES_1 = 0x10;
+    static CONT_HIRES_2 = 0x11;
+    static ONCE_HIRES_1 = 0x20;
+    constructor(..._a: unknown[]) {
+      if (!i2cPart("bh1750")) throw noDev("BH1750");
+    }
+    luminance(_mode?: unknown) {
+      if (!i2cPart("bh1750")) throw noDev("BH1750");
+      return Math.round(Math.max(0, Math.min(65535, hal.env().lux)) * 10) / 10;
+    }
+    get lux() {
+      return this.luminance();
+    }
+    on() {}
+    off() {}
+    reset() {}
+  }
+  const bh1750 = { BH1750: MPBH1750 };
+  class MPOneWire {
+    pinId?: string;
+    constructor(p: unknown) {
+      this.pinId = (p as { pinId?: string })?.pinId ?? resolve(p);
+    }
+    probe() {
+      const part = this.pinId ? hal.findPart(this.pinId, ["ds18b20"]) : undefined;
+      return part && part.pin === "DATA" && hal.partSupply(part.id, "VCC", "GND") > 2.9 ? part : undefined;
+    }
+    scan() {
+      return this.probe() ? [[0x28, 0xff, 0x64, 0x1e, 0x0f, 0x3c, 0x45, 0x91]] : [];
+    }
+    reset() {
+      return !!this.probe();
+    }
+  }
+  class DS18X20 {
+    ow: MPOneWire;
+    constructor(ow: unknown) {
+      this.ow = ow as MPOneWire;
+    }
+    scan() {
+      return this.ow.scan();
+    }
+    convert_temp() {}
+    read_temp(_rom?: unknown) {
+      if (!this.ow.probe()) throw new PyError("Exception", "CRC error — no DS18B20 answered");
+      return Math.round((hal.env().temperature + (Math.random() - 0.5) * 0.1) * 16) / 16;
+    }
+  }
+  const onewire = { OneWire: MPOneWire };
+  const ds18x20 = { DS18X20 };
+  // Raspberry Pi (Blinka / w1thermsensor)
+  class BlinkaBME280 {
+    sea_level_pressure = 1013.25;
+    constructor(..._a: unknown[]) {
+      bmeRead();
+    }
+    get temperature() {
+      return bmeRead().t;
+    }
+    get relative_humidity() {
+      return bmeRead().h;
+    }
+    get humidity() {
+      return bmeRead().h;
+    }
+    get pressure() {
+      return bmeRead().pa / 100;
+    }
+    get altitude() {
+      return 44330 * (1 - Math.pow(bmeRead().pa / 100 / this.sea_level_pressure, 0.1903));
+    }
+  }
+  const adafruit_bme280 = { Adafruit_BME280_I2C: BlinkaBME280, basic: { Adafruit_BME280_I2C: BlinkaBME280 } };
+  const adafruit_bh1750 = {
+    BH1750: class {
+      constructor(..._a: unknown[]) {
+        if (!i2cPart("bh1750")) throw noDev("BH1750");
+      }
+      get lux() {
+        return Math.round(Math.max(0, hal.env().lux) * 10) / 10;
+      }
+    },
+  };
+  const w1thermsensor = {
+    W1ThermSensor: class {
+      constructor(..._a: unknown[]) {
+        const pin = board.pins.find((x) => x.gpio === 4);
+        const part = pin ? hal.findPart(pin.id, ["ds18b20"]) : undefined;
+        if (!part) throw new PyError("NoSensorFoundError", "No DS18B20 on GPIO4 (the 1-Wire pin) — wire DATA to GPIO4");
+      }
+      get_temperature() {
+        return Math.round(hal.env().temperature * 16) / 16;
+      }
+    },
+  };
 
   const random = {
     randint: (a: unknown, b: unknown) => num(a) + Math.floor(Math.random() * (num(b) - num(a) + 1)),
@@ -1010,6 +1150,14 @@ export function createPythonGlobals(hal: Hal): Record<string, unknown> {
     gpiozero,
     signal: { pause },
     adafruit_dht,
+    adafruit_bme280,
+    "adafruit_bme280.basic": adafruit_bme280.basic,
+    adafruit_bh1750,
+    w1thermsensor,
+    bme280,
+    bh1750,
+    onewire,
+    ds18x20,
     board: boardMod,
     random,
     math,

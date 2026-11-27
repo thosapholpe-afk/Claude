@@ -84,6 +84,8 @@ export interface PartDef {
   host?: boolean;
   /** Size-dependent footprint (breadboard columns, perfboard X × Y). */
   layout?: (props: Record<string, unknown>) => PartLayout;
+  /** Click / hold on the canvas while running presses it (buttons, touch pads, joystick switch). */
+  pressable?: boolean;
 }
 
 export interface PartLayout {
@@ -381,6 +383,7 @@ export const PARTS: PartDef[] = [
       ["2a", "2b"],
     ],
     switches: (_p, input) => (input.pressed ? [["1a", "2a"]] : []),
+    pressable: true,
     keywords: ["button", "switch", "push", "ปุ่ม", "สวิตช์"],
     post: (c) => ({ on: Boolean(c.input.pressed) }),
   },
@@ -693,6 +696,261 @@ export const PARTS: PartDef[] = [
       digitalOut(c, "DO", "GND", loud, s);
     },
     post: (c) => ({ powered: c.supply("VCC", "GND") > 3, indicator: Boolean(c.mem.det), reading: c.env.sound, readingUnit: "dB" }),
+  },
+  // ------------------------------------------------------------------ more sensors
+  {
+    type: "bme280",
+    name: "BME280 weather (I²C)",
+    category: "sensor",
+    description: "Bosch temperature, humidity and barometric pressure sensor on a GY-BME280 board. Adafruit_BME280 library, address 0x76.",
+    w: 12.7,
+    h: 15.24,
+    h3: 3,
+    pins: [pin("VCC", "VIN", 2.54, 13.97, "vcc"), pin("GND", "GND", 5.08, 13.97, "gnd"), pin("SCL", "SCL", 7.62, 13.97, "scl", "scl"), pin("SDA", "SDA", 10.16, 13.97, "sda", "sda")],
+    props: [
+      { key: "model", label: "Chip", type: "select", default: "BME280", options: [{ value: "BME280", label: "BME280 (T, RH, P)" }, { value: "BMP280", label: "BMP280 (T, P)" }] },
+      { key: "address", label: "I²C address", type: "select", default: "0x76", options: [{ value: "0x76", label: "0x76" }, { value: "0x77", label: "0x77" }] },
+    ],
+    env: ["temperature", "humidity", "pressure"],
+    supplyMin: 1.8,
+    lib: "Adafruit_BME280.h",
+    keywords: ["bme280", "bmp280", "pressure", "barometer", "altitude", "weather", "ความกดอากาศ", "อุณหภูมิ", "ความชื้น", "สภาพอากาศ"],
+    stamp: (c) => {
+      c.R(c.n("SDA"), c.n("VCC"), 10_000);
+      c.R(c.n("SCL"), c.n("VCC"), 10_000);
+      c.R(c.n("VCC"), c.n("GND"), 30_000);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 1.7, reading: c.env.pressure, readingUnit: "hPa" }),
+  },
+  {
+    type: "bh1750",
+    name: "BH1750 light meter (I²C)",
+    category: "sensor",
+    description: "Digital ambient light sensor (GY-30), 1–65535 lx. BH1750 library, address 0x23.",
+    w: 15.24,
+    h: 18.5,
+    h3: 3,
+    pins: [
+      pin("VCC", "VCC", 2.54, 17.2, "vcc"),
+      pin("GND", "GND", 5.08, 17.2, "gnd"),
+      pin("SCL", "SCL", 7.62, 17.2, "scl", "scl"),
+      pin("SDA", "SDA", 10.16, 17.2, "sda", "sda"),
+      pin("ADDR", "ADDR", 12.7, 17.2, "nc"),
+    ],
+    props: [],
+    env: ["lux"],
+    supplyMin: 2.4,
+    lib: "BH1750.h",
+    keywords: ["bh1750", "gy-30", "light", "lux", "illuminance", "แสง", "ความสว่าง"],
+    stamp: (c) => {
+      c.R(c.n("SDA"), c.n("VCC"), 10_000);
+      c.R(c.n("SCL"), c.n("VCC"), 10_000);
+      c.R(c.n("VCC"), c.n("GND"), 30_000);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 2.3, reading: Math.round(clamp(c.env.lux, 0, 65535)), readingUnit: "lx" }),
+  },
+  {
+    type: "ds18b20",
+    name: "DS18B20 waterproof probe",
+    category: "sensor",
+    description: "1-Wire digital thermometer in a steel probe, −55…125 °C. OneWire + DallasTemperature libraries. The 4.7 kΩ pull-up is included in this model.",
+    w: 10.16,
+    h: 40.64,
+    h3: 6,
+    pins: [pin("GND", "GND (black)", 2.54, 39.37, "gnd"), pin("DATA", "DATA (yellow)", 5.08, 39.37, "digital-out", "digital"), pin("VCC", "VDD (red)", 7.62, 39.37, "vcc")],
+    props: [],
+    env: ["temperature"],
+    supplyMin: 3.0,
+    lib: "DallasTemperature.h",
+    keywords: ["ds18b20", "onewire", "1-wire", "dallas", "temperature", "waterproof", "probe", "อุณหภูมิ", "กันน้ำ", "หัววัด"],
+    stamp: (c) => c.R(c.n("DATA"), c.n("VCC"), 4700),
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 2.9, reading: c.env.temperature, readingUnit: "°C" }),
+  },
+  {
+    type: "ir-obstacle",
+    name: "IR obstacle sensor FC-51",
+    category: "sensor",
+    description: "IR LED + photodiode pair. OUT goes LOW when something is closer than the trim-pot range (2–30 cm).",
+    w: 32,
+    h: 14,
+    h3: 8,
+    pins: [pin("OUT", "OUT", 30.73, 4.46, "digital-out", "digital"), pin("GND", "GND", 30.73, 7.0, "gnd"), pin("VCC", "VCC", 30.73, 9.54, "vcc")],
+    props: [{ key: "range", label: "Detection range", type: "number", default: 15, min: 2, max: 30, step: 1, unit: "cm" }],
+    env: ["distance"],
+    supplyMin: 3.0,
+    keywords: ["ir", "obstacle", "fc-51", "proximity", "avoid", "robot", "infrared", "สิ่งกีดขวาง", "อินฟราเรด", "หุ่นยนต์"],
+    stamp: (c) => {
+      const s = c.supply("VCC", "GND");
+      if (s < 2.8) return;
+      const near = c.env.distance < Number(c.props.range ?? 15);
+      c.mem.det = near ? 1 : 0;
+      digitalOut(c, "OUT", "GND", !near, s);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 2.8, indicator: Boolean(c.mem.det), reading: c.env.distance, readingUnit: "cm" }),
+  },
+  {
+    type: "hall",
+    name: "Hall magnetic sensor KY-003",
+    category: "sensor",
+    description: "A3144 Hall switch. S goes LOW while a magnet's south pole is near (> 3.5 mT).",
+    w: 20,
+    h: 12,
+    h3: 5,
+    pins: [pin("S", "S", 18.73, 3.46, "digital-out", "digital"), pin("VCC", "+", 18.73, 6.0, "vcc"), pin("GND", "−", 18.73, 8.54, "gnd")],
+    props: [],
+    env: ["magnet"],
+    supplyMin: 3.0,
+    keywords: ["hall", "magnet", "magnetic", "a3144", "ky-003", "rpm", "tachometer", "แม่เหล็ก", "รอบ"],
+    stamp: (c) => {
+      const s = c.supply("VCC", "GND");
+      if (s < 2.8) return;
+      // A3144: operate at ~3.5 mT, release at ~2.4 mT (hysteresis)
+      const B = c.env.magnet;
+      if (B > 3.5) c.mem.det = 1;
+      else if (B < 2.4) c.mem.det = 0;
+      digitalOut(c, "S", "GND", !c.mem.det, s);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 2.8, indicator: Boolean(c.mem.det), reading: c.env.magnet, readingUnit: "mT" }),
+  },
+  {
+    type: "touch",
+    name: "Touch sensor TTP223",
+    category: "input",
+    description: "Capacitive touch pad. SIG goes HIGH while the pad is touched — click and hold it while the simulation runs.",
+    w: 15.24,
+    h: 12.7,
+    h3: 2,
+    pins: [pin("GND", "GND", 5.08, 11.43, "gnd"), pin("SIG", "I/O", 7.62, 11.43, "digital-out", "digital"), pin("VCC", "VCC", 10.16, 11.43, "vcc")],
+    props: [{ key: "mode", label: "Output", type: "select", default: "momentary", options: [{ value: "momentary", label: "Momentary (HIGH while touched)" }, { value: "toggle", label: "Toggle (each touch flips)" }] }],
+    supplyMin: 2.0,
+    pressable: true,
+    keywords: ["touch", "ttp223", "capacitive", "สัมผัส", "แตะ", "ปุ่มสัมผัส"],
+    stamp: (c) => {
+      const s = c.supply("VCC", "GND");
+      if (s < 1.9) return;
+      const pressed = !!c.input.pressed;
+      if (c.props.mode === "toggle") {
+        if (pressed && !c.mem.was) c.mem.state = c.mem.state ? 0 : 1;
+        c.mem.was = pressed ? 1 : 0;
+      } else c.mem.state = pressed ? 1 : 0;
+      c.V(c.n("SIG"), c.n("GND"), c.mem.state ? s : 0, 300);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 1.9, on: Boolean(c.mem.state), indicator: Boolean(c.mem.state) }),
+  },
+  {
+    type: "joystick",
+    name: "Joystick KY-023",
+    category: "input",
+    description: "Two 10 kΩ pots (VRx, VRy) and a push switch (SW → GND, use INPUT_PULLUP). Move it with the sliders; click to press.",
+    w: 34,
+    h: 26,
+    h3: 32,
+    pins: [
+      pin("GND", "GND", 32.73, 7.92, "gnd"),
+      pin("VCC", "+5V", 32.73, 10.46, "vcc"),
+      pin("VRX", "VRx", 32.73, 13.0, "analog", "adc"),
+      pin("VRY", "VRy", 32.73, 15.54, "analog", "adc"),
+      pin("SW", "SW", 32.73, 18.08, "signal", "digital"),
+    ],
+    props: [
+      { key: "x", label: "Stick X", type: "range", default: 0.5, min: 0, max: 1, step: 0.01 },
+      { key: "y", label: "Stick Y", type: "range", default: 0.5, min: 0, max: 1, step: 0.01 },
+    ],
+    supplyMin: 2.5,
+    pressable: true,
+    switches: (_p, input) => (input.pressed ? [["SW", "GND"]] : []),
+    keywords: ["joystick", "thumbstick", "ky-023", "game", "จอยสติ๊ก", "คันโยก"],
+    stamp: (c) => {
+      const s = c.supply("VCC", "GND");
+      if (s < 1) return;
+      const x = clamp(Number(c.props.x ?? 0.5), 0, 1);
+      const y = clamp(Number(c.props.y ?? 0.5), 0, 1);
+      c.V(c.n("VRX"), c.n("GND"), s * x, 2500);
+      c.V(c.n("VRY"), c.n("GND"), s * y, 2500);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 1, on: Boolean(c.input.pressed), reading: Math.round(Number(c.props.x ?? 0.5) * 100), readingUnit: "% X" }),
+  },
+  {
+    type: "pulse",
+    name: "Pulse / heart-rate sensor",
+    category: "sensor",
+    description: "Optical PPG sensor (Pulse Sensor Amped). S outputs the blood-volume waveform around VCC/2 — count the peaks for BPM.",
+    w: 16,
+    h: 24,
+    h3: 3,
+    pins: [pin("S", "S", 5.46, 22.86, "analog", "adc"), pin("VCC", "+", 8.0, 22.86, "vcc"), pin("GND", "−", 10.54, 22.86, "gnd")],
+    props: [],
+    env: ["heartRate"],
+    supplyMin: 3.0,
+    keywords: ["pulse", "heart", "heartbeat", "bpm", "ppg", "หัวใจ", "ชีพจร", "การเต้นของหัวใจ"],
+    stamp: (c) => {
+      const s = c.supply("VCC", "GND");
+      if (s < 2.8) return;
+      const bpm = clamp(c.env.heartRate, 20, 240);
+      const ph = ((c.t * bpm) / 60) % 1;
+      const w = Math.exp(-Math.pow((ph - 0.14) / 0.055, 2)) + 0.32 * Math.exp(-Math.pow((ph - 0.42) / 0.08, 2)) - 0.12 * Math.exp(-Math.pow((ph - 0.3) / 0.03, 2));
+      c.mem.beat = ph < 0.25 ? 1 : 0;
+      c.V(c.n("S"), c.n("GND"), s * clamp(0.5 + 0.3 * (w - 0.25) + 0.006 * vnoise(c.t * 60, 14), 0, 1), 1000);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 2.8, indicator: Boolean(c.mem.beat), reading: Math.round(c.env.heartRate), readingUnit: "bpm", outV: c.v(c.n("S")) - c.v(c.n("GND")) }),
+  },
+  {
+    type: "mq135",
+    name: "Air quality MQ-135",
+    category: "sensor",
+    description: "Heated SnO₂ sensor for CO₂, NH₃, benzene and smoke. Needs ~20 s warm-up; AO rises with pollution.",
+    w: 32,
+    h: 22,
+    h3: 18,
+    pins: [pin("VCC", "VCC", 12.19, 20.73, "vcc"), pin("GND", "GND", 14.73, 20.73, "gnd"), pin("DO", "DO", 17.27, 20.73, "digital-out", "digital"), pin("AO", "AO", 19.81, 20.73, "analog", "adc")],
+    props: [{ key: "threshold", label: "Alarm threshold", type: "range", default: 0.5, min: 0.05, max: 0.95, step: 0.01 }],
+    env: ["co2", "smoke"],
+    supplyMin: 4.5,
+    prefer5v: true,
+    keywords: ["mq135", "mq-135", "air", "quality", "co2", "pollution", "คุณภาพอากาศ", "มลพิษ", "คาร์บอนไดออกไซด์"],
+    stamp: (c) => {
+      const s = c.supply("VCC", "GND");
+      if (s < 3) {
+        c.mem.on = -1;
+        return;
+      }
+      if (c.mem.on === undefined || c.mem.on < 0) c.mem.on = c.t;
+      const ppm = Math.max(300, c.env.co2 + 1.5 * c.env.smoke);
+      let frac = 0.12 + 0.78 * clamp(Math.log10(ppm / 400) / Math.log10(10000 / 400), 0, 1);
+      const warm = clamp((c.t - c.mem.on) / 20, 0, 1);
+      frac = frac + (1 - warm) * 0.3 * (1 - frac);
+      frac = clamp(frac * (s / 5) + 0.003 * vnoise(c.t * 4, 18), 0, 1);
+      c.V(c.n("AO"), c.n("GND"), s * frac, 1000);
+      const alarm = frac > Number(c.props.threshold ?? 0.5);
+      c.mem.det = alarm ? 1 : 0;
+      digitalOut(c, "DO", "GND", !alarm, s);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 3, indicator: Boolean(c.mem.det), reading: Math.round(c.env.co2), readingUnit: "ppm", outV: c.v(c.n("AO")) - c.v(c.n("GND")) }),
+  },
+  {
+    type: "rain",
+    name: "Rain sensor FC-37",
+    category: "sensor",
+    description: "Rain plate + LM393 comparator board. AO falls as the plate gets wet; DO goes LOW past the trim threshold.",
+    w: 60,
+    h: 22,
+    h3: 6,
+    pins: [pin("AO", "A0", 58.73, 7.19, "analog", "adc"), pin("DO", "D0", 58.73, 9.73, "digital-out", "digital"), pin("GND", "GND", 58.73, 12.27, "gnd"), pin("VCC", "VCC", 58.73, 14.81, "vcc")],
+    props: [{ key: "sensitivity", label: "Sensitivity (trim pot)", type: "range", default: 0.5, min: 0, max: 1, step: 0.01 }],
+    env: ["rain", "water"],
+    supplyMin: 3.0,
+    keywords: ["rain", "raindrop", "fc-37", "yl-83", "weather", "wet", "ฝน", "ฝนตก", "เปียก"],
+    stamp: (c) => {
+      const s = c.supply("VCC", "GND");
+      if (s < 2.8) return;
+      const wet = clamp(Math.max(c.env.rain, c.env.water * 1.2) + 0.01 * vnoise(c.t * 7, 19), 0, 1);
+      c.mem.wet = wet;
+      c.V(c.n("AO"), c.n("GND"), s * clamp(0.97 - 0.78 * Math.pow(wet, 0.6), 0, 1), 1000);
+      const det = wet > 1 - Number(c.props.sensitivity ?? 0.5) * 0.95;
+      c.mem.det = det ? 1 : 0;
+      digitalOut(c, "DO", "GND", !det, s);
+    },
+    post: (c) => ({ powered: c.supply("VCC", "GND") > 2.8, indicator: Boolean(c.mem.det), reading: Math.round((c.mem.wet ?? 0) * 100), readingUnit: "% wet", outV: c.v(c.n("AO")) - c.v(c.n("GND")) }),
   },
   // ------------------------------------------------------------------ prototyping
   {

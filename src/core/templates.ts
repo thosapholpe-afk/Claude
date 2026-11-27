@@ -663,6 +663,162 @@ while True:
     },
   },
   {
+    id: "storm-station",
+    name: "Storm weather station",
+    thai: "สถานีตรวจพายุ (BME280 + ฝน)",
+    description: "BME280 pressure, temperature and humidity plus a rain plate. Run it in the thunderstorm scenario and watch the pressure fall.",
+    icon: "cloud-lightning",
+    boards: withAdc(1),
+    scenario: "storm",
+    parts: [
+      { id: "B1", type: "bme280", label: "BME1", dx: 28, dy: -18 },
+      { id: "RN", type: "rain", label: "RAIN1", dx: 26, dy: 24 },
+    ],
+    wiring: [
+      ["B1.VCC", "@3v3"],
+      ["B1.GND", "@gnd"],
+      ["B1.SDA", "@sda"],
+      ["B1.SCL", "@scl"],
+      ["RN.VCC", "@logic"],
+      ["RN.GND", "@gnd"],
+      ["RN.AO", "@adc:rain"],
+    ],
+    code: {
+      arduino: (p, b) => `#include <Wire.h>
+#include <Adafruit_BME280.h>
+
+Adafruit_BME280 bme;
+const int RAIN_PIN = ${p.rain.ard};   // rain plate AO: lower = wetter
+
+void setup() {
+  Serial.begin(115200);
+  if (!bme.begin(0x76)) {
+    Serial.println("BME280 not found - check SDA/SCL");
+  }
+}
+
+void loop() {
+  float t = bme.readTemperature();
+  float h = bme.readHumidity();
+  float hpa = bme.readPressure() / 100.0;
+  int raw = analogRead(RAIN_PIN);
+  float wet = 100.0 - raw * 100.0 / ${2 ** (b.family === "esp32" ? 12 : 10) - 1}.0;
+
+  Serial.print("temp:");
+  Serial.print(t);
+  Serial.print(",hum:");
+  Serial.print(h);
+  Serial.print(",pressure:");
+  Serial.print(hpa);
+  Serial.print(",rain:");
+  Serial.println(wet);
+  if (hpa < 995) Serial.println("Storm warning: pressure is low");
+  delay(1000);
+}
+`,
+      micropython: (p, b) => {
+        const g = (id: string) => b.pins.find((x) => x.id === id)?.gpio ?? 0;
+        return `from machine import Pin, I2C, ADC
+import bme280, utime
+
+i2c = I2C(0, sda=Pin(${g(b.i2c.sda)}), scl=Pin(${g(b.i2c.scl)}))
+bme = bme280.BME280(i2c=i2c)
+rain = ${b.family === "esp8266" ? "ADC(0)" : `ADC(Pin(${p.rain.gpio}))`}
+
+while True:
+    t, pa, h = bme.read_compensated_data()
+    wet = 100 - rain.read_u16() * 100 / 65535
+    print("temp:{:.2f},hum:{:.1f},pressure:{:.1f},rain:{:.0f}".format(t, h, pa / 100, wet))
+    utime.sleep(1)
+`;
+      },
+    },
+  },
+  {
+    id: "heart-rate",
+    name: "Heart-rate monitor",
+    thai: "วัดชีพจร / อัตราการเต้นหัวใจ",
+    description: "Pulse sensor waveform on the plotter; the LED flashes on every beat and BPM is computed from beat-to-beat time.",
+    icon: "heart-pulse",
+    boards: withAdc(1),
+    parts: [
+      { id: "PS", type: "pulse", label: "PULSE1", dx: 28, dy: -16 },
+      { id: "L1", type: "led", label: "LED1", dx: 52, dy: 14, props: { color: "red" } },
+      { id: "R1", type: "resistor", label: "R1", dx: 36, dy: 28, props: { ohms: 220 } },
+    ],
+    wiring: [
+      ["PS.VCC", "@logic"],
+      ["PS.GND", "@gnd"],
+      ["PS.S", "@adc:pulse"],
+      ["R1.1", "@digital:led"],
+      ["R1.2", "L1.A"],
+      ["L1.C", "@gnd"],
+    ],
+    code: {
+      arduino: (p, b) => {
+        const max = 2 ** (b.family === "esp32" ? 12 : 10) - 1;
+        return `const int PULSE_PIN = ${p.pulse.ard};
+const int LED_PIN = ${p.led.ard};
+const int THRESHOLD = ${Math.round(max * 0.58)};   // above the waveform's resting level
+const int HYSTERESIS = ${Math.round(max * 0.05)};
+
+bool inBeat = false;
+unsigned long lastBeat = 0;
+int bpm = 0;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+}
+
+void loop() {
+  int v = analogRead(PULSE_PIN);
+  if (!inBeat && v > THRESHOLD) {
+    inBeat = true;
+    unsigned long now = millis();
+    if (lastBeat > 0) bpm = 60000UL / (now - lastBeat);
+    lastBeat = now;
+    digitalWrite(LED_PIN, HIGH);
+  } else if (inBeat && v < THRESHOLD - HYSTERESIS) {
+    inBeat = false;
+    digitalWrite(LED_PIN, LOW);
+  }
+  Serial.print("ppg:");
+  Serial.print(v);
+  Serial.print(",bpm:");
+  Serial.println(bpm);
+  delay(20);
+}
+`;
+      },
+      micropython: (p, b) => `from machine import Pin, ADC
+import utime
+
+sensor = ${b.family === "esp8266" ? "ADC(0)" : `ADC(Pin(${p.pulse.gpio}))`}
+led = Pin(${p.led.gpio}, Pin.OUT)
+THRESHOLD = 38000
+in_beat = False
+last = 0
+bpm = 0
+
+while True:
+    v = sensor.read_u16()
+    if not in_beat and v > THRESHOLD:
+        in_beat = True
+        now = utime.ticks_ms()
+        if last:
+            bpm = 60000 // utime.ticks_diff(now, last)
+        last = now
+        led.on()
+    elif in_beat and v < THRESHOLD - 3000:
+        in_beat = False
+        led.off()
+    print("ppg:{},bpm:{}".format(v, bpm))
+    utime.sleep_ms(20)
+`,
+    },
+  },
+  {
     id: "vibration-monitor",
     name: "Motor vibration monitor",
     thai: "วิเคราะห์การสั่นของมอเตอร์",

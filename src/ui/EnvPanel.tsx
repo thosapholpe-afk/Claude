@@ -1,4 +1,4 @@
-import { Building2, CloudRain, Factory, Flame, Footprints, Leaf, Mountain, RotateCcw, Snowflake, Sun, TestTubeDiagonal } from "lucide-react";
+import { Building2, CloudRain, Factory, Flame, Footprints, Leaf, Mountain, RotateCcw, Snowflake, Sun, TestTubeDiagonal, CloudLightning } from "lucide-react";
 import { ENV_VARS, getScenario, SCENARIOS } from "../core/env";
 import { engine } from "../core/sim";
 import { useStudio } from "../store";
@@ -14,6 +14,7 @@ export const SCENARIO_ICON: Record<string, typeof Flame> = {
   intruder: Footprints,
   earthquake: Mountain,
   greenhouse: Leaf,
+  storm: CloudLightning,
 };
 
 export function EnvPanel() {

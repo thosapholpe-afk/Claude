@@ -756,7 +756,7 @@ function dedupe(d: Diagnostic[]) {
 }
 
 const KNOWN_INCLUDES = new Set([
-  "Arduino.h", "Servo.h", "ESP32Servo.h", "DHT.h", "DHT_U.h", "Adafruit_Sensor.h", "Wire.h", "LiquidCrystal_I2C.h", "Adafruit_NeoPixel.h",
+  "Arduino.h", "Servo.h", "ESP32Servo.h", "DHT.h", "Adafruit_BME280.h", "Adafruit_BMP280.h", "BH1750.h", "OneWire.h", "DallasTemperature.h", "DHT_U.h", "Adafruit_Sensor.h", "Wire.h", "LiquidCrystal_I2C.h", "Adafruit_NeoPixel.h",
   "WiFi.h", "ESP8266WiFi.h", "ESP8266HTTPClient.h", "PubSubClient.h", "SPI.h", "WiFiClientSecure.h", "HTTPClient.h", "Preferences.h", "math.h", "stdio.h", "stdlib.h", "string.h",
 ]);
 

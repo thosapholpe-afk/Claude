@@ -238,7 +238,7 @@ export function Inspector() {
           )}
         </label>
       ))}
-      {inst.type === "button" && running && (
+      {def.pressable && running && (
         <button className="btn" onPointerDown={() => engine.setInput(inst.id, { pressed: true })} onPointerUp={() => engine.setInput(inst.id, { pressed: false })} onPointerLeave={() => engine.setInput(inst.id, { pressed: false })}>
           Hold to press
         </button>

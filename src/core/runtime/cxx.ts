@@ -34,7 +34,7 @@ const PRIMS = new Set([
 const QUALIFIERS = new Set(["const", "static", "volatile", "extern", "inline", "IRAM_ATTR", "PROGMEM", "constexpr", "register"]);
 export const CLASSES = new Set([
   "Servo", "DHT", "LiquidCrystal_I2C", "Adafruit_NeoPixel", "WiFiClient", "PubSubClient", "IPAddress", "WiFiClientSecure",
-  "ESP32PWM", "HTTPClient", "Preferences",
+  "ESP32PWM", "HTTPClient", "Preferences", "OneWire", "DallasTemperature", "Adafruit_BME280", "Adafruit_BMP280", "BH1750",
 ]);
 const INTEGRAL = new Set(["int", "long", "short", "byte", "word", "unsigned", "signed", "size_t", "uint8_t", "int8_t", "uint16_t", "int16_t", "uint32_t", "int32_t", "uint64_t", "int64_t"]);
 const BLOCKING = new Set(["delay", "delayMicroseconds", "yield"]);
@@ -185,11 +185,29 @@ function castFn(types: string[], intBits: number): string | null {
   return null;
 }
 
+/** `f(&obj)` → `f(obj)`: objects are passed by reference in JS anyway. Binary `a & b` and `int &r` are left alone. */
+function dropAddressOf(toks: Tok[]): Tok[] {
+  const UNARY_BEFORE = new Set(["(", ",", "=", "?", ":", "{", ";", "&&", "||", "!", "+", "-", "*", "/", "%", "==", "!=", "<", ">", "<=", ">=", "+=", "-=", "return"]);
+  const out: Tok[] = [];
+  let prev: Tok | undefined;
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i];
+    if (t.k === "op" && t.v === "&" && (!prev || UNARY_BEFORE.has(prev.v))) {
+      let j = i + 1;
+      while (toks[j]?.k === "ws") j++;
+      if (toks[j]?.k === "id") continue;
+    }
+    out.push(t);
+    if (t.k !== "ws") prev = t;
+  }
+  return out;
+}
+
 export function transpileArduino(source: string, opts: { intBits: 16 | 32 } = { intBits: 32 }): TranspileResult {
   const includes: string[] = [];
   const warnings: string[] = [];
   const pre = preprocess(stripComments(source), includes);
-  const toks = tokenize(pre);
+  const toks = dropAddressOf(tokenize(pre));
   const sig: number[] = [];
   toks.forEach((t, i) => {
     if (t.k !== "ws") sig.push(i);

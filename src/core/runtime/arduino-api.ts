@@ -586,6 +586,141 @@ export function createArduinoGlobals(hal: Hal): Record<string, unknown> {
     }
   }
 
+  // ----------------------------------------------------------------- I²C sensors
+  const I2C_DEFAULT: Record<string, string> = { lcd1602: "0x27", bme280: "0x76", bh1750: "0x23" };
+  /** Every powered device on the bus with its 7-bit address. */
+  const i2cDevices = () =>
+    Object.keys(I2C_DEFAULT)
+      .map((type) => {
+        const p = hal.findI2C([type], i2cPins.sda, i2cPins.scl);
+        return p ? { ...p, type, addr: parseInt(String(p.props.address ?? I2C_DEFAULT[type]), 16) } : undefined;
+      })
+      .filter(Boolean) as { id: string; props: Record<string, unknown>; type: string; addr: number }[];
+  const i2cFind = (type: string, addr?: number) => i2cDevices().find((d) => d.type === type && (addr === undefined || d.addr === addr));
+  /** Barometric altitude (m) from pressure (hPa) and sea-level pressure. */
+  const altitude = (hPa: number, sea: number) => 44330 * (1 - Math.pow(hPa / sea, 0.1903));
+
+  class Adafruit_BME280 {
+    addr = 0x76;
+    ok = false;
+    constructor(..._a: unknown[]) {}
+    begin(addr: unknown = 0x76, _wire?: unknown) {
+      this.addr = toNum(addr);
+      const d = i2cFind("bme280", this.addr);
+      if (!d) {
+        const any = i2cFind("bme280");
+        warnOnce("bme", any ? `BME280: nothing at 0x${this.addr.toString(16)} — the sensor is set to 0x${any.addr.toString(16)}` : "BME280: no sensor found — wire SDA/SCL to the board's I²C pins and power it");
+      }
+      this.ok = !!d;
+      return this.ok;
+    }
+    private dev() {
+      return i2cFind("bme280", this.addr);
+    }
+    readTemperature() {
+      return this.dev() ? Math.round((hal.env().temperature + (Math.random() - 0.5) * 0.04) * 100) / 100 : NaN;
+    }
+    readHumidity() {
+      const d = this.dev();
+      if (!d) return NaN;
+      if (d.props.model === "BMP280") return 0;
+      return Math.round(Math.max(0, Math.min(100, hal.env().humidity + (Math.random() - 0.5) * 0.2)) * 100) / 100;
+    }
+    /** Pa */
+    readPressure() {
+      return this.dev() ? Math.round((hal.env().pressure + (Math.random() - 0.5) * 0.04) * 100 * 100) / 100 : NaN;
+    }
+    readAltitude(sea: unknown = 1013.25) {
+      return this.dev() ? altitude(hal.env().pressure, toNum(sea)) : NaN;
+    }
+    seaLevelForAltitude(alt: unknown, hPa: unknown) {
+      return toNum(hPa) / Math.pow(1 - toNum(alt) / 44330, 5.255);
+    }
+    setSampling() {}
+    takeForcedMeasurement() {
+      return true;
+    }
+    sensorID() {
+      return 0x60;
+    }
+  }
+
+  class BH1750 {
+    addr = 0x23;
+    constructor(addr: unknown = 0x23) {
+      this.addr = toNum(addr) || 0x23;
+    }
+    begin(..._a: unknown[]) {
+      const ok = !!i2cFind("bh1750");
+      if (!ok) warnOnce("bh1750", "BH1750: no light sensor found — wire SDA/SCL to the board's I²C pins and power it");
+      return ok;
+    }
+    configure() {
+      return true;
+    }
+    measurementReady() {
+      return true;
+    }
+    readLightLevel() {
+      if (!i2cFind("bh1750")) return -2;
+      const lux = Math.max(0, Math.min(65535, hal.env().lux));
+      return Math.round(lux * 1.2) / 1.2;
+    }
+  }
+
+  class OneWire {
+    pinId?: string;
+    constructor(p: unknown) {
+      this.pinId = P(p);
+    }
+    reset() {
+      return this.probe() ? 1 : 0;
+    }
+    probe() {
+      const part = this.pinId ? hal.findPart(this.pinId, ["ds18b20"]) : undefined;
+      return part && part.pin === "DATA" && hal.partSupply(part.id, "VCC", "GND") > 2.9 ? part : undefined;
+    }
+  }
+
+  class DallasTemperature {
+    bus?: OneWire;
+    res = 12;
+    constructor(bus?: unknown) {
+      this.bus = bus instanceof OneWire ? bus : undefined;
+    }
+    begin() {
+      if (!this.bus?.probe()) warnOnce("ds18b20", "DS18B20: no probe found on that pin — check the yellow DATA wire and power");
+    }
+    getDeviceCount() {
+      return this.bus?.probe() ? 1 : 0;
+    }
+    setResolution(bits: unknown) {
+      this.res = Math.max(9, Math.min(12, toNum(bits)));
+    }
+    setWaitForConversion() {}
+    requestTemperatures() {
+      return true;
+    }
+    private read() {
+      if (!this.bus?.probe()) return -127;
+      const step = 0.5 / Math.pow(2, this.res - 9);
+      return Math.round((hal.env().temperature + (Math.random() - 0.5) * 0.1) / step) * step;
+    }
+    getTempCByIndex(i: unknown = 0) {
+      return toNum(i) === 0 ? this.read() : -127;
+    }
+    getTempFByIndex(i: unknown = 0) {
+      const c = this.getTempCByIndex(i);
+      return c === -127 ? -196.6 : (c * 9) / 5 + 32;
+    }
+    getTempC() {
+      return this.read();
+    }
+    toFahrenheit(c: unknown) {
+      return (toNum(c) * 9) / 5 + 32;
+    }
+  }
+
   const Wire = {
     begin: (sda?: unknown, scl?: unknown) => {
       if (sda !== undefined && scl !== undefined) i2cPins = { sda: P(sda), scl: P(scl) };
@@ -597,9 +732,7 @@ export function createArduinoGlobals(hal: Hal): Record<string, unknown> {
     },
     write: () => 1,
     endTransmission() {
-      const p = hal.findI2C(["lcd1602"], i2cPins.sda, i2cPins.scl);
-      const a = p ? parseInt(String(p.props.address ?? "0x27"), 16) : -1;
-      return a === this._addr ? 0 : 2;
+      return i2cDevices().some((d) => d.addr === this._addr) ? 0 : 2;
     },
     requestFrom: () => 0,
     available: () => 0,
@@ -896,6 +1029,14 @@ export function createArduinoGlobals(hal: Hal): Record<string, unknown> {
     },
     DHT,
     LiquidCrystal_I2C,
+    Adafruit_BME280,
+    Adafruit_BMP280: Adafruit_BME280,
+    BH1750,
+    OneWire,
+    DallasTemperature,
+    DEVICE_DISCONNECTED_C: -127,
+    BMP280_ADDRESS_ALT: 0x76,
+    BMP280_ADDRESS: 0x77,
     Adafruit_NeoPixel,
     HTTPClient: class {
       begin() {

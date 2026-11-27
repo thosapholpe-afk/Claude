@@ -406,6 +406,199 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           <PinLabels def={def} side="left" />
         </g>
       );
+    case "bme280":
+      return (
+        <g>
+          <Pcb w={12.7} h={15.24} color="#6b2fa3" rx={0.8} />
+          <circle cx={2.2} cy={2.2} r={1.1} fill="#0b0b0d" stroke="#d9b25a" strokeWidth={0.4} />
+          <circle cx={10.5} cy={2.2} r={1.1} fill="#0b0b0d" stroke="#d9b25a" strokeWidth={0.4} />
+          <rect x={4.85} y={3.6} width={3} height={3} rx={0.3} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.15} />
+          <circle cx={7.2} cy={4.2} r={0.28} fill="#222" />
+          <g fill="#c8a372">
+            <rect x={2.0} y={7.4} width={1.4} height={0.8} rx={0.1} />
+            <rect x={9.3} y={7.4} width={1.4} height={0.8} rx={0.1} />
+          </g>
+          <rect x={4.4} y={7.2} width={3.9} height={1.3} rx={0.2} fill="#1b1d20" />
+          <text x={6.35} y={10.0} fontSize={1.0} fill="#fff" textAnchor="middle" fontFamily="Chakra Petch" fontWeight={700}>
+            GY-{String(inst.props.model ?? "BME280")}
+          </text>
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="top" />
+        </g>
+      );
+    case "bh1750":
+      return (
+        <g>
+          <Pcb w={15.24} h={18.5} color="#1d5fa8" rx={0.8} />
+          <circle cx={7.62} cy={2.6} r={1.5} fill="#0b0b0d" stroke="#d9b25a" strokeWidth={0.45} />
+          <rect x={5.6} y={6.0} width={4.0} height={3.2} rx={0.3} fill="#1b1d20" />
+          <rect x={6.5} y={6.8} width={2.2} height={1.6} rx={0.2} fill="#b7c3cf" opacity={0.85} />
+          <rect x={1.8} y={6.6} width={1.4} height={0.8} fill="#c8a372" />
+          <rect x={12.0} y={6.6} width={1.4} height={0.8} fill="#c8a372" />
+          <text x={7.62} y={12.4} fontSize={1.25} fill="#fff" textAnchor="middle" fontFamily="Chakra Petch" fontWeight={700}>
+            GY-30 BH1750
+          </text>
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="top" />
+        </g>
+      );
+    case "ds18b20":
+      return (
+        <g>
+          <path d="M2.4 2.6 a2.6 2.6 0 0 1 5.2 0 V20 H2.4 Z" fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.25} />
+          <rect x={2.0} y={19.6} width={6.0} height={4.4} rx={0.6} fill="#121315" />
+          <path d="M5 24 C5 28, 5 29, 5 30" stroke="#121315" strokeWidth={3.2} fill="none" strokeLinecap="round" />
+          <g fill="none" strokeWidth={0.9} strokeLinecap="round">
+            <path d="M4.2 30 C3.6 33, 2.54 34, 2.54 38.6" stroke="#2a2a2a" />
+            <path d="M5 30 C5 33, 5.08 34, 5.08 38.6" stroke="#f2c230" />
+            <path d="M5.8 30 C6.6 33, 7.62 34, 7.62 38.6" stroke="#d6302a" />
+          </g>
+          <text x={5} y={12} fontSize={1.2} fill="#4b5157" textAnchor="middle" fontFamily="IBM Plex Mono" transform="rotate(-90 5 12)">
+            DS18B20
+          </text>
+          <HeaderPins def={def} />
+        </g>
+      );
+    case "ir-obstacle":
+      return (
+        <g>
+          <Pcb w={32} h={14} color="#1d5fa8" />
+          <rect x={-3.2} y={2.0} width={4.6} height={3.6} rx={1.8} fill="#cfe3ff" stroke="#7aa6d9" strokeWidth={0.25} opacity={0.95} />
+          <rect x={-3.2} y={8.4} width={4.6} height={3.6} rx={1.8} fill="#141518" stroke="#3a3d42" strokeWidth={0.25} />
+          {L.powered && <rect x={-3.2} y={2.0} width={4.6} height={3.6} rx={1.8} fill="#c25cff" opacity={0.25} />}
+          <TrimPot x={9.5} y={7} />
+          <rect x={14.5} y={4.4} width={5} height={5.2} rx={0.3} fill="#1b1d20" stroke="#333" strokeWidth={0.2} />
+          <IndicatorLed x={23.5} y={3.6} on={!!L.powered} />
+          <IndicatorLed x={23.5} y={10.4} on={!!L.indicator} color="#33ff88" />
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="left" />
+        </g>
+      );
+    case "hall":
+      return (
+        <g>
+          <Pcb w={20} h={12} color="#16181b" />
+          <path d="M-2.2 3.6 h3.4 v4.8 h-3.4 l-0.8 -0.8 v-3.2 z" fill="#1d1e21" stroke="#3a3d42" strokeWidth={0.2} />
+          <line x1={1.2} y1={4.6} x2={3.6} y2={4.6} stroke="#b9c0c7" strokeWidth={0.35} />
+          <line x1={1.2} y1={6} x2={3.6} y2={6} stroke="#b9c0c7" strokeWidth={0.35} />
+          <line x1={1.2} y1={7.4} x2={3.6} y2={7.4} stroke="#b9c0c7" strokeWidth={0.35} />
+          <rect x={6.2} y={4.8} width={3.4} height={1.4} rx={0.3} fill="#c8a372" />
+          <IndicatorLed x={12.2} y={6} on={!!L.indicator} />
+          <text x={8} y={10.4} fontSize={1.1} fill="#e9e9e9" textAnchor="middle" fontFamily="Chakra Petch" fontWeight={600}>
+            KY-003
+          </text>
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="left" />
+        </g>
+      );
+    case "touch": {
+      const on = !!L.on;
+      return (
+        <g>
+          <Pcb w={15.24} h={12.7} color="#c8202a" rx={1} />
+          <circle cx={7.62} cy={4.5} r={3.6} fill="#d9b25a" opacity={0.85} />
+          <circle cx={7.62} cy={4.5} r={2.9} fill="#c8202a" />
+          <circle cx={7.62} cy={4.5} r={2.3} fill="none" stroke="#f4e3b0" strokeWidth={0.25} opacity={0.6} />
+          {on && <circle cx={7.62} cy={4.5} r={2.9 + 1.4 * ((t * 1.6) % 1)} fill="none" stroke="#fff" strokeWidth={0.35} opacity={1 - ((t * 1.6) % 1)} />}
+          <rect x={11.6} y={2} width={2.2} height={1.6} rx={0.2} fill="#1b1d20" />
+          <IndicatorLed x={2.2} y={2.2} on={on} color="#ff3b30" />
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="top" />
+        </g>
+      );
+    }
+    case "joystick": {
+      const x = (Number(inst.props.x ?? 0.5) - 0.5) * 8;
+      const y = (Number(inst.props.y ?? 0.5) - 0.5) * 8;
+      const pressed = !!L.on;
+      return (
+        <g>
+          <Pcb w={34} h={26} color="#16181b" rx={1.2} />
+          <rect x={4} y={1.5} width={23} height={23} rx={2} fill="#202226" stroke="#3a3d42" strokeWidth={0.3} />
+          <circle cx={15.5} cy={13} r={9.6} fill="#2a2c31" stroke="#45484f" strokeWidth={0.3} />
+          <g transform={`translate(${15.5 + x} ${13 + y})`}>
+            <circle r={7.4} fill="#000" opacity={0.35} transform="translate(0.5 0.8)" />
+            <circle r={7.2} fill={pressed ? "#3a3d44" : "#26282c"} stroke="#55585f" strokeWidth={0.35} />
+            {[5.6, 4.0, 2.4].map((r) => (
+              <circle key={r} r={r} fill="none" stroke="#3c3f46" strokeWidth={0.45} />
+            ))}
+          </g>
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="left" color="#d7dbe0" />
+        </g>
+      );
+    }
+    case "pulse": {
+      const beat = !!L.indicator;
+      return (
+        <g>
+          <g fill="none" strokeWidth={0.9} strokeLinecap="round">
+            <path d="M6.6 14.4 C6.4 18, 5.46 19, 5.46 22.4" stroke="#7b3fd0" />
+            <path d="M8 15 C8 18, 8 19, 8 22.4" stroke="#d6302a" />
+            <path d="M9.4 14.4 C9.6 18, 10.54 19, 10.54 22.4" stroke="#2a2a2a" />
+          </g>
+          <circle cx={8} cy={8} r={8} fill="#000" opacity={0.3} filter="url(#tc-soft)" transform="translate(0.4 0.8)" />
+          <circle cx={8} cy={8} r={8} fill="#1f8a4c" stroke="rgba(255,255,255,.2)" strokeWidth={0.25} />
+          <path d="M8 12.6 C3 9, 3.2 4.6, 5.8 4.6 C7 4.6, 7.6 5.4, 8 6.2 C8.4 5.4, 9 4.6, 10.2 4.6 C12.8 4.6, 13 9, 8 12.6 Z" fill="#f2f2f2" opacity={0.92} />
+          <rect x={7.1} y={6.8} width={1.8} height={1.8} rx={0.3} fill={beat ? "#5cff8f" : "#1b4d2c"} />
+          {beat && <circle cx={8} cy={7.7} r={3.6} fill="#5cff8f" opacity={0.45} filter="url(#tc-glow)" />}
+          <HeaderPins def={def} />
+        </g>
+      );
+    }
+    case "mq135":
+      return (
+        <g>
+          <Pcb w={32} h={22} color="#1d5fa8" />
+          <circle cx={16} cy={9.5} r={8.6} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <circle cx={16} cy={9.5} r={6.8} fill="url(#tc-mesh)" />
+          <circle cx={16} cy={9.5} r={6.8} fill="#ff6a00" opacity={L.powered ? 0.12 + 0.08 * Math.sin(t * 3) : 0} />
+          <text x={28.5} y={11.6} fontSize={1.2} fill="#fff" textAnchor="middle" fontFamily="Chakra Petch" fontWeight={700} opacity={0.8}>
+            MQ-135
+          </text>
+          <IndicatorLed x={3} y={4} on={!!L.powered} />
+          <IndicatorLed x={3} y={8} on={!!L.indicator} color="#33ff88" />
+          <TrimPot x={28.5} y={5} />
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="top" />
+        </g>
+      );
+    case "rain": {
+      const wet = Math.max(0, Math.min(1, ((L.reading ?? 0) as number) / 100));
+      const drops = Math.round(wet * 22);
+      return (
+        <g>
+          <rect x={0.4} y={1.8} width={26} height={20} rx={0.8} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
+          <rect x={0} y={1} width={26} height={20} rx={0.8} fill="#1d2a3a" stroke="rgba(255,255,255,.18)" strokeWidth={0.25} />
+          <g fill="none" stroke="#c9d2da" strokeWidth={0.55}>
+            <path d="M2 3 H24 M2 3 V19" />
+            {Array.from({ length: 7 }, (_, i) => (
+              <path key={i} d={`M2 ${5.2 + i * 2.2} H22`} transform={i % 2 ? "translate(2 0)" : undefined} />
+            ))}
+            <path d="M24 3 V19 H4" />
+          </g>
+          {Array.from({ length: drops }, (_, i) => {
+            const rx = 3 + ((i * 37.7) % 20);
+            const ry = 3 + ((i * 53.3 + t * 2) % 16);
+            return <ellipse key={i} cx={rx} cy={ry} rx={0.7} ry={0.9} fill="#8fd0ff" opacity={0.75} />;
+          })}
+          <g fill="none" strokeWidth={0.7} strokeLinecap="round">
+            <path d="M26 9 C27.5 9, 27.5 10, 29 10" stroke="#e8e8e8" />
+            <path d="M26 13 C27.5 13, 27.5 12, 29 12" stroke="#2a2a2a" />
+          </g>
+          <g transform="translate(28 4)">
+            <rect x={0.3} y={0.7} width={32} height={14} rx={1} fill="#000" opacity={0.3} />
+            <rect width={32} height={14} rx={1} fill="#1d5fa8" stroke="rgba(255,255,255,.18)" strokeWidth={0.25} />
+            <TrimPot x={7} y={7} />
+            <rect x={12.5} y={4.4} width={5} height={5.2} rx={0.3} fill="#1b1d20" />
+            <IndicatorLed x={22} y={3.6} on={!!L.powered} />
+            <IndicatorLed x={22} y={10.4} on={!!L.indicator} color="#33ff88" />
+          </g>
+          <HeaderPins def={def} />
+          <PinLabels def={def} side="left" />
+        </g>
+      );
+    }
     case "relay": {
       const on = !!L.on;
       return (

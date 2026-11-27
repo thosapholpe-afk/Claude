@@ -194,7 +194,12 @@ export type EnvKey =
   | "sound"
   | "distance"
   | "motion"
-  | "vibration";
+  | "vibration"
+  | "pressure"
+  | "rain"
+  | "co2"
+  | "magnet"
+  | "heartRate";
 
 export interface PartInstance {
   id: string;

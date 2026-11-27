@@ -9,7 +9,7 @@ import { useStudio } from "../store";
 import { Board2D, SvgDefs } from "./render/Board2D";
 import { Part2D } from "./render/Parts2D";
 
-const ANIMATED = new Set(["buzzer", "led", "water", "mq2", "dc-motor"]);
+const ANIMATED = new Set(["buzzer", "led", "water", "mq2", "mq135", "dc-motor", "rain", "pulse", "touch"]);
 
 interface View {
   tx: number;
@@ -196,7 +196,7 @@ export function Canvas() {
   const onPointerDownPart = (e: React.PointerEvent, inst: PartInstance) => {
     e.stopPropagation();
     const st = useStudio.getState();
-    if (running && inst.type === "button") {
+    if (running && getPart(inst.type)?.pressable) {
       engine.setInput(inst.id, { pressed: true });
       (e.target as Element).setPointerCapture?.(e.pointerId);
       const up = () => {
