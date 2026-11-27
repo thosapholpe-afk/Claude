@@ -102,7 +102,15 @@ interface State {
   mqttStatus: "offline" | "connecting" | "online" | "error";
   caseParams: CaseParams;
   wireColor: string | null;
-  modal: null | "custom-sensor" | "scan" | "drawing" | "projects" | "export" | "viewer3d";
+  modal: null | "custom-sensor" | "scan" | "drawing" | "projects" | "export" | "viewer3d" | "claude";
+  /** Claude link (MCP): an external Claude working in this tab. */
+  link: {
+    on: boolean;
+    status: "off" | "connecting" | "online" | "elsewhere" | "error";
+    busy: string | null;
+    last: { t: number; tool: string; summary: string; ok: boolean } | null;
+    log: { t: number; tool: string; summary: string; ok: boolean }[];
+  };
   /** Instance shown in the 3D viewer (null = whole circuit). */
   viewerFocus: string | null;
   /** Bumped on every select() call, even when the selection is unchanged (re-opens the inspector). */
@@ -181,6 +189,7 @@ export const useStudio = create<State>((set, get) => ({
   caseParams: DEFAULT_CASE,
   wireColor: null,
   modal: null,
+  link: { on: false, status: "off", busy: null, last: null, log: [] },
   viewerFocus: null,
   selKey: 0,
   openViewer: (id) => set({ viewerFocus: id, modal: "viewer3d" }),

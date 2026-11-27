@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { AGENT_MODEL, AGENT_SYSTEM, AGENT_TOOLS } from "../src/core/agentTools";
 import { BOARDS } from "../src/core/boards";
 import { formReady, recordToForm } from "./form";
+import { mountMcp } from "./mcp";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8787);
@@ -257,6 +258,7 @@ app.get("/api/health", (_req, res) => {
     providers: Object.values(PROVIDERS).filter(enabled).map((p) => p.id),
     googleForm: formReady(),
     copilot: !!anthropic,
+    mcp: `${PUBLIC_URL}/mcp/<key>`,
   });
 });
 
@@ -417,11 +419,14 @@ If it is one of them, set match to its id. Otherwise set match "unknown" and des
   }
 });
 
+// ------------------------------------------------------------------ Claude link (MCP)
+mountMcp(app, PUBLIC_URL);
+
 // ------------------------------------------------------------------ static (production)
 const dist = path.join(here, "..", "dist");
 if (fs.existsSync(dist)) {
   app.use(express.static(dist, { maxAge: "1h", index: false }));
-  app.get(/^(?!\/(api|auth)\/).*/, (_req, res) => res.sendFile(path.join(dist, "index.html")));
+  app.get(/^(?!\/(api|auth|mcp)(\/|$)).*/, (_req, res) => res.sendFile(path.join(dist, "index.html")));
 }
 
 app.listen(PORT, () => {
@@ -431,6 +436,7 @@ app.listen(PORT, () => {
   console.log(`[thosaphol-connect] copilot: ${anthropic ? `Claude (${AGENT_MODEL})` : "offline assistant (no ANTHROPIC_API_KEY)"}`);
   console.log(`[thosaphol-connect] Google Form logging: ${formReady() ? "on" : "off (run: npm run form:setup -- <form link>)"}`);
   console.log(`[thosaphol-connect] user data: ${USERS_FILE}`);
+  console.log(`[thosaphol-connect] Claude link (MCP): ${PUBLIC_URL}/mcp/<key from ⋯ → Claude link>`);
   console.log(`[thosaphol-connect] redirect URIs to register with each sign-in provider:`);
   for (const p of Object.values(PROVIDERS)) console.log(`    ${p.id.padEnd(9)} ${redirectUri(p.id)}${enabled(p) ? "" : "   (not configured)"}`);
 });

@@ -85,7 +85,28 @@
 
 1. เปิดเว็บ → กดไอคอน GitHub/Google → login → ตั้งชื่อ
 2. ฟอร์มต้องมีแถวใหม่ `Event = signup`
-3. `<URL>/api/health` จะบอกว่าเปิดอะไรอยู่บ้าง: `providers`, `googleForm`, `copilot`
+3. `<URL>/api/health` จะบอกว่าเปิดอะไรอยู่บ้าง: `providers`, `googleForm`, `copilot`, `mcp`
+
+---
+
+## ขั้นที่ 5 — ให้ Claude เข้ามาทำงานในเว็บ (Claude link / MCP)
+
+ไม่ต้องตั้งค่าอะไรใน Render เพิ่ม
+
+1. เปิดเว็บ → เมนู **⋯** → **Claude link** → กด **Turn on** (จุดเขียว = เชื่อมแล้ว)
+2. กด **Copy** ที่ช่อง *Connector URL* (หน้าตา `https://thosaphol-connect.onrender.com/mcp/xxxxxxxx`)
+3. ที่ **claude.ai** (หรือแอป Claude): **Settings → Connectors → Add custom connector**
+   - Name: `Thosaphol Connect`
+   - URL: วาง URL ที่ copy มา → **Add** (ไม่ต้องใส่ OAuth Client ID/Secret)
+4. เปิดแชทใหม่ → เปิด connector *Thosaphol Connect* จากเมนูเครื่องมือ → สั่งได้เลย เช่น
+   “วาดวงจร start-stop มอเตอร์ 3 เฟสด้วย PLC ใน Thosaphol Connect แล้วทดสอบกด START/STOP ให้ดู”
+5. **เปิดแท็บ Thosaphol Connect ค้างไว้และให้เห็นบนจอ** (วางคู่กับ Claude) — เบราว์เซอร์จะพักแท็บที่ถูกซ่อน
+   บนมือถือให้ใช้จากคอมหรือ iPad แบบ Split View
+
+ใช้กับ Claude Code ก็ได้: `claude mcp add --transport http thosaphol <Connector URL>`
+
+- URL นี้เป็น**ความลับ** ใครมี URL ก็แก้วงจรในแท็บนั้นได้ตอนที่เปิด link อยู่ → กด **New URL** เพื่อเปลี่ยน (อันเก่าใช้ไม่ได้ทันที)
+- Render แผนฟรีจะหลับเมื่อไม่มีคนใช้ ~15 นาที: ให้เปิดเว็บก่อนแล้วค่อยสั่ง Claude (ระหว่างเปิด link เว็บจะไม่หลับ)
 
 ---
 

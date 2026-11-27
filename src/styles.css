@@ -3771,3 +3771,184 @@ input[type="checkbox"] {
   height: 38px;
   max-width: none;
 }
+
+/* ==========================================================================
+   Claude link (MCP)
+   ========================================================================== */
+.cl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex: none;
+  display: inline-block;
+}
+.cl-dot.s-online,
+.claude-pill.s-online .cl-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(179, 214, 154, 0.18);
+}
+.cl-dot.s-connecting,
+.claude-pill.s-connecting .cl-dot {
+  background: var(--warn);
+  animation: cl-blink 1.2s ease-in-out infinite;
+}
+.cl-dot.s-error,
+.cl-dot.s-elsewhere,
+.claude-pill.s-error .cl-dot,
+.claude-pill.s-elsewhere .cl-dot {
+  background: var(--danger);
+}
+@keyframes cl-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.mm-item .cl-dot {
+  margin-left: auto;
+}
+.claude-pill {
+  height: 32px;
+  gap: 7px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: var(--grad-soft);
+  font-size: 12.5px;
+  max-width: 260px;
+  min-width: 0;
+}
+.claude-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.claude-pill.busy {
+  box-shadow: inset 0 0 0 1px var(--accent-glow);
+}
+.spin {
+  animation: spin360 0.9s linear infinite;
+}
+.cl-lead {
+  margin: 0 0 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.cl-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.cl-switch.on {
+  background: var(--grad-soft);
+}
+.cl-switch .cl-dot {
+  width: 10px;
+  height: 10px;
+}
+.cl-state {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.cl-state small {
+  color: var(--text-2);
+}
+.cl-h {
+  margin: 16px 0 6px;
+  font: 600 12px/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.cl-copy {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0;
+}
+.cl-copy input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+  color: var(--text);
+  font: 12px var(--font-mono);
+}
+.cl-note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.cl-note svg {
+  margin-top: 2px;
+  flex: none;
+}
+.cl-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.cl-steps b {
+  color: var(--text);
+  font-weight: 600;
+}
+.cl-steps code {
+  font: 12px var(--font-mono);
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--panel-3);
+}
+.cl-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 200px;
+  overflow: auto;
+}
+.cl-log li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--panel-2);
+}
+.cl-log li svg {
+  color: var(--ok);
+  flex: none;
+}
+.cl-log li.bad svg {
+  color: var(--danger);
+}
+.cl-log time {
+  font: 11px var(--font-mono);
+  color: var(--text-3);
+  flex: none;
+}
+.cl-log span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layout-phone .claude-pill {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}

@@ -252,6 +252,196 @@ export async function runLadder(hal: Hal, prog: LadderProgram, publish: (s: PlcS
 }
 
 // ---------------------------------------------------------------------------
+// text form for the AI agent / MCP:  rows of contact tokens + an output token
+// ---------------------------------------------------------------------------
+export interface RowSpec {
+  /** Contacts left→right (AND): "X0", "NC X1" (or "/X1"), "P X2" rising, "N X2" falling, "-" wire, "" empty. */
+  contacts?: string[];
+  /** "OUT Y0" (or "Y0"), "SET Y0", "RST Y0", "TON T0 3", "TOF T1 2", "CTU C0 5", "RST C0". */
+  output?: string;
+  /** Column the row starts at (0 = left rail). Cells before it stay empty. */
+  start?: number;
+}
+export interface RungSpec {
+  comment?: string;
+  rows: RowSpec[];
+  /** [row, boundary]: join row and row+1 at boundary b (0 = left rail, 6 = just before the outputs). */
+  branches?: [number, number][];
+}
+
+const ADDR_HELP = "X0–X7 inputs, Y0–Y7 outputs, M0–M31 relays, T0–T15 timers, C0–C15 counters";
+
+export function parseContact(tok: string): Cell {
+  const s = String(tok ?? "").trim();
+  if (!s) return null;
+  if (s === "-" || s === "—" || /^wire$/i.test(s)) return W;
+  let kind: ContactKind = "no";
+  let a = s;
+  const m = s.match(/^(NO|NC|XIC|XIO|P|N|RISE|FALL|LD|LDI|AND|ANI)\s+(\S+)$/i);
+  if (m) {
+    const k = m[1].toUpperCase();
+    kind = k === "NC" || k === "XIO" || k === "LDI" || k === "ANI" ? "nc" : k === "P" || k === "RISE" ? "rise" : k === "N" || k === "FALL" ? "fall" : "no";
+    a = m[2];
+  } else if (/^[!/~¬]/.test(s)) {
+    kind = "nc";
+    a = s.slice(1);
+  } else if (/^[↑^]/.test(s)) {
+    kind = "rise";
+    a = s.slice(1);
+  } else if (/^↓/.test(s)) {
+    kind = "fall";
+    a = s.slice(1);
+  }
+  a = a.trim().toUpperCase();
+  if (!isAddress(a)) throw new Error(`"${tok}" is not a contact (${ADDR_HELP}; prefix NC/P/N)`);
+  return { t: kind, a };
+}
+
+export function parseOutput(tok: string): Out {
+  const words = String(tok ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return null;
+  let op = "OUT";
+  if (/^(OUT|OTE|COIL|SET|S|OTL|RST|R|RES|OTU|TON|TOF|CTU)$/i.test(words[0]) && words.length > 1) op = words.shift()!.toUpperCase();
+  const a = (words[0] ?? "").toUpperCase();
+  if (!isAddress(a)) throw new Error(`"${tok}" is not an output (${ADDR_HELP})`);
+  if (a.startsWith("X")) throw new Error(`"${tok}": inputs (X) can't be driven by the program`);
+  const pre = words[1] !== undefined ? Number(words[1].replace(/s$/i, "")) : undefined;
+  const timerOrCounter = /^[TC]/.test(a);
+  switch (op) {
+    case "OUT":
+    case "OTE":
+    case "COIL":
+      if (timerOrCounter) throw new Error(`"${tok}": drive timers with "TON ${a} <seconds>" and counters with "CTU ${a} <count>"`);
+      return { t: "coil", a };
+    case "SET":
+    case "S":
+    case "OTL":
+      return { t: "set", a };
+    case "RST":
+    case "R":
+    case "RES":
+    case "OTU":
+      return timerOrCounter ? { t: "rst", a } : { t: "reset", a };
+    case "TON":
+    case "TOF":
+      if (!a.startsWith("T")) throw new Error(`"${tok}": timers are T0–T15`);
+      if (!(pre !== undefined && pre > 0)) throw new Error(`"${tok}": give the preset in seconds, e.g. "${op} ${a} 3"`);
+      return { t: op === "TON" ? "ton" : "tof", a, pre };
+    case "CTU":
+      if (!a.startsWith("C")) throw new Error(`"${tok}": counters are C0–C15`);
+      if (!(pre !== undefined && pre >= 1)) throw new Error(`"${tok}": give the preset count, e.g. "CTU ${a} 5"`);
+      return { t: "ctu", a, pre: Math.round(pre) };
+  }
+  return null;
+}
+
+/** Build a ladder program from the text form (validates every token). */
+export function ladderFromSpec(rungs: RungSpec[], symbols: Record<string, string> = {}): LadderProgram {
+  if (!Array.isArray(rungs) || !rungs.length) throw new Error("give at least one rung");
+  const out = rungs.map((rs, i) => {
+    const rows = rs?.rows;
+    if (!Array.isArray(rows) || !rows.length) throw new Error(`rung ${i}: needs rows`);
+    if (rows.length > 8) throw new Error(`rung ${i}: at most 8 rows`);
+    const r = emptyRung(rows.length);
+    rows.forEach((row, ri) => {
+      const start = Math.max(0, Math.min(LADDER_COLS, Math.round(Number(row.start ?? 0)) || 0));
+      const cs = (row.contacts ?? []).map((tok) => {
+        try {
+          return parseContact(tok);
+        } catch (e) {
+          throw new Error(`rung ${i} row ${ri}: ${(e as Error).message}`);
+        }
+      });
+      if (start + cs.length > LADDER_COLS) throw new Error(`rung ${i} row ${ri}: at most ${LADDER_COLS} columns per row — move part of the logic into an M relay on its own rung`);
+      cs.forEach((c, k) => (r.cells[ri][start + k] = c));
+      if (row.output) {
+        try {
+          r.outs[ri] = parseOutput(row.output);
+        } catch (e) {
+          throw new Error(`rung ${i} row ${ri}: ${(e as Error).message}`);
+        }
+        for (let c = start + cs.length; c < LADDER_COLS; c++) r.cells[ri][c] = W;
+      }
+    });
+    for (const br of rs.branches ?? []) {
+      const [row, b] = br.map(Number);
+      if (!(row >= 0 && row < rows.length - 1)) throw new Error(`rung ${i}: branch row ${row} must be between 0 and ${rows.length - 2}`);
+      if (!(b >= 0 && b <= LADDER_COLS)) throw new Error(`rung ${i}: branch boundary ${b} must be 0–${LADDER_COLS}`);
+      r.links[row][b] = true;
+    }
+    if (!r.outs.some(Boolean)) throw new Error(`rung ${i}: no output — every rung needs at least one output`);
+    if (rs.comment) r.comment = String(rs.comment).slice(0, 200);
+    return r;
+  });
+  const sym: Record<string, string> = {};
+  for (const [k, v] of Object.entries(symbols ?? {})) {
+    const a = k.trim().toUpperCase();
+    if (isAddress(a) && v) sym[a] = String(v).slice(0, 16);
+  }
+  return { kind: "ladder", rungs: out, symbols: sym };
+}
+
+const fmtCell = (c: Cell) => (!c ? "" : c.t === "wire" ? "-" : c.t === "no" ? c.a : `${c.t === "nc" ? "NC" : c.t === "rise" ? "P" : "N"} ${c.a}`);
+const fmtOut = (o: Exclude<Out, null>) =>
+  o.t === "coil" ? `OUT ${o.a}` : o.t === "set" ? `SET ${o.a}` : o.t === "reset" || o.t === "rst" ? `RST ${o.a}` : `${o.t.toUpperCase()} ${o.a} ${o.pre ?? 1}`;
+
+/** The reverse of ladderFromSpec. */
+export function ladderToSpec(p: LadderProgram): { rungs: RungSpec[]; symbols: Record<string, string> } {
+  return {
+    symbols: p.symbols,
+    rungs: p.rungs.map((r) => {
+      const rows: RowSpec[] = r.cells.map((row, ri) => {
+        const out = r.outs[ri];
+        let first = row.findIndex(Boolean);
+        if (first < 0) first = LADDER_COLS;
+        let end = first - 1;
+        row.forEach((c, ci) => {
+          if (c && (!out || c.t !== "wire")) end = ci;
+        });
+        // with an output, trailing wire is implied
+        const spec: RowSpec = { contacts: row.slice(first, end + 1).map(fmtCell) };
+        if (first > 0) spec.start = first;
+        if (out) spec.output = fmtOut(out);
+        return spec;
+      });
+      const branches: [number, number][] = [];
+      r.links.forEach((row, ri) => row.forEach((on, b) => on && branches.push([ri, b])));
+      return { ...(r.comment ? { comment: r.comment } : {}), rows, ...(branches.length ? { branches } : {}) };
+    }),
+  };
+}
+
+/** A plain-text drawing of the program, for reading it back without a screen. */
+export function ladderAscii(p: LadderProgram): string {
+  const cell = (c: Cell) => {
+    if (!c) return "        ";
+    if (c.t === "wire") return "--------";
+    const tag = c.t === "no" ? c.a : `${c.t === "nc" ? "/" : c.t === "rise" ? "↑" : "↓"}${c.a}`;
+    return `-[${tag.padEnd(4)}]-`;
+  };
+  const lines: string[] = [];
+  p.rungs.forEach((r, i) => {
+    lines.push(`R${i}${r.comment ? `  ; ${r.comment}` : ""}`);
+    r.cells.forEach((row, ri) => {
+      let s = "|";
+      for (let b = 0; b <= LADDER_COLS; b++) {
+        const joint = (ri > 0 && r.links[ri - 1]?.[b]) || r.links[ri]?.[b];
+        const left = b === 0 || !!row[b - 1];
+        const right = b < LADDER_COLS ? !!row[b] : !!r.outs[ri];
+        s += joint ? "+" : left && right ? "-" : " ";
+        if (b < LADDER_COLS) s += cell(row[b]);
+      }
+      const o = r.outs[ri];
+      if (o) s += `( ${fmtOut(o)} )`;
+      lines.push(s.replace(/\s+$/, ""));
+    });
+  });
+  const sym = Object.entries(p.symbols ?? {});
+  if (sym.length) lines.push("", "Symbols: " + sym.map(([a, n]) => `${a}=${n}`).join(", "));
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // starter programs
 // ---------------------------------------------------------------------------
 export function startStopProgram(): LadderProgram {

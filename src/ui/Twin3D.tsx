@@ -567,7 +567,7 @@ export function Twin3D() {
   const Icon = SCENARIO_ICON[scenario.id];
   return (
     <div className="twin3d">
-      <Canvas shadows flat dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 400 }} gl={{ antialias: true }}>
+      <Canvas shadows flat dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 400 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
         <CameraRig preset={preset} span={span} />
         <Atmosphere />
         <Lights />

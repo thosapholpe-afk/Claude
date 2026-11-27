@@ -279,6 +279,37 @@ function parseEndpoint(board: BoardDef, parts: PartInstance[], raw: string): Ep 
   return undefined;
 }
 
+/**
+ * Resolve one wire end written as text: a board pin ("GP10", "X0", "PLC.Y0", "board:24V")
+ * or a part pin ("K1.A1", "S1:3", "LED1 A"). Used by the literal `wire` tool.
+ */
+export function resolveEndpoint(project: Pick<Project, "boardId" | "parts">, raw: string): { part: string; pin: string; text: string } | { error: string } {
+  const board = getBoard(project.boardId);
+  const txt = raw.trim();
+  const pre = txt.match(/^(board|mcu|plc|cpu|[A-Za-z0-9-]+?)[.:\s]\s*(\S+)$/i);
+  if (pre && (/^(board|mcu|plc|cpu)$/i.test(pre[1]) || pre[1].toLowerCase() === board.short.toLowerCase() || pre[1].toLowerCase() === board.id.toLowerCase())) {
+    const bp = resolveBoardPin(board, pre[2]);
+    if (bp) return { part: BOARD_ID, pin: bp.id, text: `${board.short}:${bp.label}` };
+  }
+  const ep = parseEndpoint(board, project.parts, txt);
+  if (ep?.kind === "board" && ep.board) return { part: BOARD_ID, pin: ep.board.id, text: `${board.short}:${ep.board.label}` };
+  if (ep?.kind === "part" && ep.part) {
+    const def = getPart(ep.part.type);
+    if (!ep.pin) {
+      const names = def?.pins.map((p) => p.id).join(", ");
+      return { error: `"${raw}": say which pin of ${ep.part.label} (${names})` };
+    }
+    // numbered terminals must match exactly ("1" must not silently become "13")
+    const asked = txt.match(/^[\w-]+?[.:\s]\s*(\S+)$/)?.[1];
+    if (asked && /^\d+$/.test(asked) && asked !== ep.pin.id) return { error: `${ep.part.label} has no terminal ${asked} (${def?.pins.map((p) => p.id).join(", ")})` };
+    return { part: ep.part.id, pin: ep.pin.id, text: `${ep.part.label}.${ep.pin.id}` };
+  }
+  const named = txt.match(/^([\w-]+?)[.:\s]\s*(\S+)$/);
+  const inst = named && project.parts.find((p) => !isBoard(p) && p.label.toLowerCase() === named[1].toLowerCase());
+  if (inst) return { error: `${inst.label} has no terminal "${named![2]}" (${getPart(inst.type)?.pins.map((p) => p.id).join(", ")})` };
+  return { error: `"${raw}" is not a board pin of ${board.short} or a part pin like LED1.A` };
+}
+
 export function runWireCommand(project: Project, text: string): CommandResult {
   const board = getBoard(project.boardId);
   let parts = [...project.parts];

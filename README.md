@@ -25,6 +25,7 @@ Thosaphol Connect เป็นแพลตฟอร์มจำลองวง�
 | 13 | **PLC mode + ladder** and **electrical control** | Switch MCU ⇄ PLC in the top bar. TC-PLC 16MT (8 × 24 V in, 8 × 24 V out, FX-style X/Y/M/T/C) runs a ladder program (`src/core/plc.ts`) on a 10 ms scan; the ladder editor (`src/ui/Ladder.tsx`) has NO/NC/P/N contacts, branches, coils, Set/Reset, TON/TOF, CTU/RST, symbols and live power-flow monitoring. Control parts: NO/NC pushbuttons, E-stop, 0-1 and 1-0-2 selectors, limit switch, pilot lamps, contactor, overload, timer relay, 24 V PSU, 3-phase supply, MCB, 3-phase motor (phase order → direction). Templates: DOL start/stop, forward/reverse interlock, MAN-OFF-AUTO with timers, hard-wired relay start/stop |
 | 14 | **Multimeter** and **wiring-diagram view** | Digital multimeter part (V / mA·A / Ω / continuity, click the dial). *Wiring* view draws every part as a labelled block with IEC-style symbols and live wire voltages |
 | 15 | Compact, **iPad / phone** layout | One-row top bar with a ⋯ menu, floating canvas tools, icon rail; iPad gets slide-over panels, phones a bottom tab bar with bottom sheets |
+| 16 | **Claude link (MCP)** — let Claude work in your tab | The server is an MCP server (`server/mcp.ts`, Streamable HTTP at `/mcp/<key>`). Add the URL from ⋯ → *Claude link* as a custom connector in claude.ai or with `claude mcp add`; every tool call is relayed over SSE to your open tab and runs on the live canvas (`src/lib/claudeLink.ts`). 30 tools: build MCU circuits, switch to PLC mode, place and wire terminals one by one, write ladder in a text form, press buttons / turn selectors, watch the simulation, and take screenshots of the board, wiring or 3D view |
 
 ### Simulation model
 - **Circuit**: nodal analysis (`src/core/solver.ts`) — supplies, GPIO drivers (25 Ω), pull-ups, resistors, pots, LDRs, piecewise-linear LEDs and opto-couplers, breadboard strips, switch/relay contacts. It flags shorts, GPIO overcurrent (> 40 mA), 5 V on 3.3 V pins and burns LEDs that have no resistor.
@@ -49,6 +50,13 @@ npm run dev               # web on http://localhost:5173, API on :8787
 
 ### Claude copilot
 Set `ANTHROPIC_API_KEY`. The server proxies to `claude-opus-5-5` with tool use; the browser executes the tools on the live canvas (so the key never reaches the client). Server-side refusal fallback is enabled (`fallbacks: "default"`). Without a key the copilot uses an offline Thai/English keyword assistant.
+
+### Claude link (MCP)
+No configuration: open ⋯ → **Claude link**, switch it on and copy the connector URL (`https://<your-host>/mcp/<key>`).
+- **claude.ai / Claude apps:** Settings → Connectors → *Add custom connector* → paste the URL (no OAuth needed; the key in the path is the secret).
+- **Claude Code:** `claude mcp add --transport http thosaphol https://<your-host>/mcp/<key>` (or send `Authorization: Bearer <key>` to `/mcp`).
+- The tab must stay open (and visible — browsers pause background tabs). Only one tab serves a key at a time; *New URL* revokes the old one. Links live in memory; nothing is stored on the server.
+- Tools: `get_circuit`, `get_catalog`, `new_project`, `set_mode`, `set_view`, `load_template`, `add_part`, `move_part`, `connect`, `auto_wire`, `wire`, `disconnect`, `tidy_wires`, `write_code`, `write_ladder`, `get_ladder`, `operate`, `observe`, `simulation`, `screenshot`, scenarios/environment, case, MQTT and custom sensors. The ladder text form is described in `LADDER_HELP` (`src/core/agentTools.ts`).
 
 ### Sign-in providers
 Register `${PUBLIC_URL}/auth/<provider>/callback` as the redirect URI:

@@ -36,6 +36,7 @@ import {
   Copy,
   Spline,
   Gauge,
+  Link2,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -43,8 +44,10 @@ import { LogoMark } from "./Logo";
 import { getBoard } from "../core/boards";
 import { runWireCommand } from "../core/wiring";
 import { click, isMuted, setMuted, setTone, stopAll, stopTone } from "../lib/audio";
+import { initClaudeLink } from "../lib/claudeLink";
 import { useStudio, type LeftTab } from "../store";
 import { AIChat } from "./AIChat";
+import { ClaudeLinkModal, ClaudePill } from "./ClaudeLink";
 import { Canvas } from "./Canvas";
 import { Dock } from "./Dock";
 import { EnvPanel } from "./EnvPanel";
@@ -147,6 +150,7 @@ function AppBar({ onParts, layout }: { onParts: () => void; layout: string }) {
       </div>
       {!phone && <CommandBar />}
       <span className="spacer" />
+      <ClaudePill compact={phone} />
       <button className={`btn ghost icon-ish diag-pill ${errs ? "bad" : diag.length ? "warn" : ""}`} onClick={() => useStudio.setState({ dockTab: "diag", dockOpen: true })} title={errs ? `${errs} electrical issue(s)` : diag.length ? `${diag.length} note(s)` : "Circuit OK"}>
         <Gauge size={15} />
         {diag.length ? <b>{diag.length}</b> : null}
@@ -233,6 +237,17 @@ function MoreMenu({ phone }: { phone: boolean }) {
                   <span>{r.label}</span>
                 </button>
               ))}
+            <button
+              className="mm-item"
+              onClick={() => {
+                st.set("modal", "claude");
+                setOpen(false);
+              }}
+            >
+              <Link2 size={15} />
+              <span>Claude link</span>
+              <i className={`cl-dot s-${st.link.status}`} />
+            </button>
             {item(<FolderOpen size={15} />, "Saved works", () => st.set("modal", "projects"))}
             {item(<Wrench size={15} />, "Tidy all wires", () => st.tidyWires())}
             <label className="mm-row">
@@ -446,6 +461,7 @@ export function Editor() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  useEffect(() => initClaudeLink(), []);
   const selKey = useStudio((s) => s.selKey);
   useEffect(() => {
     if (hasSel) setRightTab("auto");
@@ -546,6 +562,7 @@ export function Editor() {
       {modal === "custom-sensor" && <CustomSensorModal />}
       {modal === "scan" && <ScanModal />}
       {modal === "projects" && <ProjectsModal />}
+      {modal === "claude" && <ClaudeLinkModal />}
       {modal === "viewer3d" && (
         <Suspense fallback={null}>
           <Viewer3DModal />

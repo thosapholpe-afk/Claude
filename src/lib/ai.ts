@@ -1,12 +1,14 @@
-import { getBoard } from "../core/boards";
-import { BOARD_ID, isBoard, isHost } from "../core/circuit";
+import { BOARDS, getBoard } from "../core/boards";
+import { BOARD_ID, instBounds, isBoard, isHost } from "../core/circuit";
 import { ENV_VARS, SCENARIOS } from "../core/env";
 import { allParts, getPart, PARTS } from "../core/parts";
+import { ladderAscii, ladderFromSpec, ladderToSpec, parseLadder, type RungSpec, serialiseLadder } from "../core/plc";
 import { engine } from "../core/sim";
 import { TEMPLATES } from "../core/templates";
 import type { CaseFeature, CustomSensorDef, EnvKey, Lang, PartInstance } from "../core/types";
-import { autoWirePart, connectedPartPins, nextLabel, labelPrefix, newId, runWireCommand, usedBoardPins } from "../core/wiring";
-import { DEFAULT_CASE, useStudio } from "../store";
+import { autoWirePart, connectedPartPins, nextLabel, labelPrefix, newId, resolveEndpoint, runWireCommand, usedBoardPins } from "../core/wiring";
+import { blankProject, DEFAULT_CASE, useStudio } from "../store";
+import { saveProject } from "./persist";
 
 export interface ChatAction {
   tool: string;
@@ -29,6 +31,90 @@ const thai = (s: string) => /[฀-๿]/.test(s);
 // ---------------------------------------------------------------------------
 // circuit snapshot for the model
 // ---------------------------------------------------------------------------
+const round = (v: number, d = 1) => Math.round(v * 10 ** d) / 10 ** d;
+
+/** The interesting bits of a part's live state, for the model. */
+export function liveSummary(id: string): Record<string, unknown> | undefined {
+  const st = useStudio.getState();
+  const l = st.snap?.live[id];
+  if (!l) return undefined;
+  const o: Record<string, unknown> = {};
+  if (l.on !== undefined) o.on = l.on;
+  if (l.brightness !== undefined) o.brightness = round(l.brightness, 2);
+  if (l.rgb) o.rgb = l.rgb.map((v) => Math.round(v));
+  if (l.angle !== undefined) o.angle = Math.round(l.angle);
+  if (l.speed !== undefined && l.speed !== 0) o.speed = Math.round(l.speed);
+  if (l.freq) o.freq_hz = Math.round(l.freq);
+  if (l.text?.length) o.display = l.text;
+  if (l.reading !== undefined && Number.isFinite(l.reading)) o.reading = `${round(l.reading, 2)}${l.readingUnit ? ` ${l.readingUnit}` : ""}`;
+  if (l.powered !== undefined) o.powered = l.powered;
+  if (l.burnt) o.burnt = true;
+  if (l.warn) o.warn = l.warn;
+  const def = getPart(st.project.parts.find((x) => x.id === id)?.type ?? "");
+  if (def?.toggleLabel) o.position = def.toggleLabel(engine.getInput(id));
+  else if (def?.pressable) o.pressed = !!engine.getInput(id).pressed;
+  return Object.keys(o).length ? o : undefined;
+}
+
+/** PLC bits worth reporting: every X/Y plus the M/T/C that are set or counting. */
+function plcSummary() {
+  const plc = useStudio.getState().snap?.plc;
+  if (!plc) return undefined;
+  const bits: Record<string, boolean> = {};
+  for (let i = 0; i < 8; i++) bits[`X${i}`] = !!plc.bits[`X${i}`];
+  for (let i = 0; i < 8; i++) bits[`Y${i}`] = !!plc.bits[`Y${i}`];
+  for (const [k, v] of Object.entries(plc.bits)) if (/^[MTC]/.test(k) && v) bits[k] = true;
+  const acc: Record<string, number> = {};
+  for (const [k, v] of Object.entries(plc.acc)) if (v) acc[k] = k.startsWith("T") ? round(v / 1000, 2) : v;
+  return { scans: plc.scans, bits, ...(Object.keys(acc).length ? { timers_s_counters: acc } : {}) };
+}
+
+const macrotask = () =>
+  new Promise<void>((r) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => r();
+    ch.port2.postMessage(0);
+  });
+
+/** Wait while the simulation runs. In a background tab requestAnimationFrame stops, so step the engine by hand. */
+export async function simWait(ms: number) {
+  if (ms <= 0) return;
+  const hidden = typeof document !== "undefined" && document.hidden;
+  if (!hidden || !useStudio.getState().sim.running) {
+    await new Promise((r) => setTimeout(r, ms));
+    return;
+  }
+  const end = performance.now() + ms;
+  let last = performance.now();
+  while (performance.now() < end && useStudio.getState().sim.running) {
+    await macrotask();
+    const now = performance.now();
+    await engine.frame(Math.min(100, now - last));
+    last = now;
+  }
+}
+
+async function ensureRunning() {
+  if (useStudio.getState().sim.running) return false;
+  await useStudio.getState().startSim();
+  await simWait(250);
+  return true;
+}
+
+/** A quick sparkle where Claude touched the canvas. */
+function flash(id: string) {
+  const inst = useStudio.getState().project.parts.find((x) => x.id === id);
+  if (!inst) return;
+  const b = instBounds(inst);
+  useStudio.setState({ burst: { x: b.x + b.w / 2, y: b.y + b.h / 2, t: Date.now() } });
+}
+
+/** Keep the user's current work in Saved works before a tool replaces it. */
+function keepCurrent() {
+  const p = useStudio.getState().project;
+  if (p.parts.filter((x) => !isBoard(x)).length) saveProject(p);
+}
+
 export function circuitSummary() {
   const st = useStudio.getState();
   const p = st.project;
@@ -44,21 +130,34 @@ export function circuitSummary() {
   return {
     project: p.name,
     board: { id: board.id, name: board.name, logic_v: board.logicV, adc_bits: board.adcBits, languages: board.languages },
+    mode: board.family === "plc" ? "plc" : "mcu",
+    view: st.view === "2d" ? "board" : st.view === "diagram" ? "wiring" : "3d",
     language: p.lang,
+    board_at: (() => {
+      const bi = p.parts.find(isBoard);
+      return bi ? { x: round(bi.x), y: round(bi.y), w: board.width, h: board.height } : undefined;
+    })(),
     parts: p.parts
       .filter((x) => !isBoard(x))
       .map((x) => {
         const def = getPart(x.type);
+        const b = instBounds(x);
         return {
           label: x.label,
           type: x.type,
+          at: { x: round(b.x), y: round(b.y), w: round(b.w), h: round(b.h), ...(x.rot ? { rot: x.rot } : {}) },
           props: x.props,
-          pins: def?.pins.filter(() => !def.host).map((pin) => {
-            const w = p.wires.find((wr) => (wr.from.part === x.id && wr.from.pin === pin.id) || (wr.to.part === x.id && wr.to.pin === pin.id));
-            const other = w ? (w.from.part === x.id ? w.to : w.from) : null;
-            return { pin: pin.id, role: pin.role, to: other ? label(other.part, other.pin) : conn.has(`${x.id}:${pin.id}`) ? "?" : null };
-          }),
-          reading: snap?.live[x.id]?.reading,
+          pins: def?.host
+            ? undefined
+            : def?.pins.map((pin) => {
+                const others = p.wires
+                  .filter((wr) => (wr.from.part === x.id && wr.from.pin === pin.id) || (wr.to.part === x.id && wr.to.pin === pin.id))
+                  .map((wr) => (wr.from.part === x.id && wr.from.pin === pin.id ? wr.to : wr.from))
+                  .map((o) => label(o.part, o.pin));
+                const to = others.length > 1 ? others : others.length ? others[0] : conn.has(`${x.id}:${pin.id}`) ? "(breadboard)" : null;
+                return { pin: pin.id, role: pin.role, to };
+              }),
+          ...(st.sim.running ? { live: liveSummary(x.id) } : {}),
         };
       }),
     board_pins_in_use: [...used].map((id) => {
@@ -70,6 +169,7 @@ export function circuitSummary() {
     environment: snap?.env,
     env_overrides: p.envOverrides,
     simulation_running: st.sim.running,
+    ...(board.family === "plc" && st.sim.running ? { plc: plcSummary() } : {}),
     diagnostics: snap?.diags.map((d) => d.msg) ?? [],
     recent_serial: st.serial.slice(-8).map((l) => l.text),
     code_excerpt: (p.code[p.lang] ?? "").slice(0, 1500),
@@ -82,6 +182,8 @@ export function circuitSummary() {
 const findInst = (label: string) => {
   const p = useStudio.getState().project;
   const q = label.trim().toLowerCase();
+  const board = getBoard(p.boardId);
+  if (["board", "plc", "mcu", board.short.toLowerCase(), board.id].includes(q)) return p.parts.find(isBoard);
   return p.parts.find((x) => x.label.toLowerCase() === q) ?? p.parts.find((x) => x.id.toLowerCase() === q) ?? p.parts.find((x) => !isBoard(x) && x.label.toLowerCase().startsWith(q));
 };
 
@@ -107,7 +209,9 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       case "load_template": {
         const t = TEMPLATES.find((x) => x.id === input.template);
         if (!t) throw new Error("unknown template");
-        const log = st.loadTemplate(t.id);
+        keepCurrent();
+        st.setProject(blankProject(st.project.boardId, t.name));
+        const log = useStudio.getState().loadTemplate(t.id);
         window.dispatchEvent(new Event("tconnect:fit"));
         return { result: { ok: true, notes: log, circuit: circuitSummary() }, summary: `Loaded template: ${t.name}`, ok: true };
       }
@@ -118,6 +222,7 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         const id = st.addPart(def.type, placeNear(), (input.props as PartInstance["props"]) ?? undefined);
         if (input.label) st.setLabel(id, String(input.label));
         const inst = useStudio.getState().project.parts.find((x) => x.id === id)!;
+        if (input.x !== undefined || input.y !== undefined) st.movePart(id, Number(input.x ?? inst.x), Number(input.y ?? inst.y), false);
         return { result: { ok: true, label: inst.label, pins: def.pins.map((p) => ({ id: p.id, role: p.role, needs: p.need })) }, summary: `Added ${inst.label} (${def.name})`, ok: true };
       }
       case "remove_part": {
@@ -260,6 +365,195 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         }
         return { result: { ok: true, type: def.type, label }, summary: `Created sensor “${def.name}”${label ? ` as ${label}` : ""}`, ok: true };
       }
+      case "get_catalog": {
+        const type = input.type ? String(input.type) : "";
+        if (type) {
+          const def = getPart(type) ?? allParts().find((p) => p.keywords.includes(type.toLowerCase()));
+          if (!def) throw new Error(`unknown part type ${type}`);
+          return {
+            result: {
+              type: def.type,
+              name: def.name,
+              category: def.category,
+              description: def.description,
+              size_mm: { w: def.w, h: def.h },
+              pins: def.pins.map((p) => ({ id: p.id, label: p.label, role: p.role, ...(p.need ? { needs: p.need } : {}) })),
+              props: def.props.map((pr) => ({ key: pr.key, type: pr.type, default: pr.default, ...(pr.min !== undefined ? { min: pr.min, max: pr.max } : {}), ...(pr.unit ? { unit: pr.unit } : {}), ...(pr.options ? { options: pr.options.map((o) => o.value) } : {}), ...(pr.live ? { live: true } : {}) })),
+              ...(def.pressable ? { operate: "press / release / click" } : def.toggle ? { operate: "toggle", states: def.toggleLabel?.({}) } : {}),
+            },
+            summary: `Catalog: ${def.name}`,
+            ok: true,
+          };
+        }
+        const cat = input.category ? String(input.category) : "";
+        if (cat === "boards")
+          return { result: BOARDS.map((b) => ({ id: b.id, name: b.name, family: b.family, logic_v: b.logicV, languages: b.languages, size_mm: { w: b.width, h: b.height } })), summary: "Catalog: boards", ok: true };
+        if (cat === "templates") return { result: TEMPLATES.map((t) => ({ id: t.id, name: t.name, description: t.description, boards: t.boards ?? "any microcontroller" })), summary: "Catalog: templates", ok: true };
+        if (cat === "scenarios") return { result: SCENARIOS.map((x) => ({ id: x.id, name: x.name })), summary: "Catalog: scenarios", ok: true };
+        const list = allParts().filter((p) => !cat || p.category === cat);
+        return { result: list.map((p) => ({ type: p.type, name: p.name, category: p.category, pins: p.pins.map((x) => x.id).join(" ") })), summary: `Catalog: ${cat || "all"} parts`, ok: true };
+      }
+      case "set_mode": {
+        const mode = String(input.mode) === "plc" ? "plc" : "mcu";
+        const isPlc = getBoard(st.project.boardId).family === "plc";
+        if ((mode === "plc") !== isPlc) {
+          keepCurrent();
+          st.setProject(blankProject(st.project.boardId, st.project.name));
+          useStudio.getState().setMode(mode);
+        }
+        return { result: { ok: true, mode, circuit: circuitSummary() }, summary: mode === "plc" ? "PLC mode" : "Microcontroller mode", ok: true };
+      }
+      case "set_view": {
+        const v = String(input.view);
+        useStudio.setState({ view: v === "wiring" ? "diagram" : v === "3d" ? "3d" : "2d" });
+        if (input.fit) setTimeout(() => window.dispatchEvent(new Event("tconnect:fit")), 80);
+        return { result: { ok: true, view: v }, summary: `View → ${v}`, ok: true };
+      }
+      case "new_project": {
+        const b = getBoard(String(input.board));
+        keepCurrent();
+        st.setProject(blankProject(b.id, String(input.name ?? `New ${b.short} circuit`)));
+        if (b.family === "plc") useStudio.getState().setLang("ladder");
+        setTimeout(() => window.dispatchEvent(new Event("tconnect:fit")), 80);
+        return { result: { ok: true, board: b.id, circuit: circuitSummary() }, summary: `New project on ${b.name}`, ok: true };
+      }
+      case "rename_project": {
+        const name = String(input.name).trim().slice(0, 80);
+        if (!name) throw new Error("name is empty");
+        st.commit((p) => ({ ...p, name }));
+        return { result: { ok: true }, summary: `Renamed to “${name}”`, ok: true };
+      }
+      case "move_part": {
+        const inst = findInst(String(input.label));
+        if (!inst) throw new Error("part not found");
+        let x = input.x !== undefined ? Number(input.x) : inst.x;
+        let y = input.y !== undefined ? Number(input.y) : inst.y;
+        if (input.dx !== undefined) x += Number(input.dx);
+        if (input.dy !== undefined) y += Number(input.dy);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("x/y must be numbers");
+        const rot = input.rotation !== undefined && !isBoard(inst) ? ((((Math.round(Number(input.rotation) / 90) * 90) % 360) + 360) % 360 as PartInstance["rot"]) : inst.rot;
+        st.commit((p) => ({ ...p, parts: p.parts.map((q) => (q.id === inst.id ? { ...q, x, y, rot } : q)) }));
+        flash(inst.id);
+        const b = instBounds(useStudio.getState().project.parts.find((q) => q.id === inst.id)!);
+        return { result: { ok: true, at: { x: round(b.x), y: round(b.y), w: round(b.w), h: round(b.h), rot } }, summary: `Moved ${inst.label}`, ok: true };
+      }
+      case "wire": {
+        const a = resolveEndpoint(st.project, String(input.from));
+        const b = resolveEndpoint(st.project, String(input.to));
+        if ("error" in a) throw new Error(a.error);
+        if ("error" in b) throw new Error(b.error);
+        if (a.part === b.part && a.pin === b.pin) throw new Error("both ends are the same terminal");
+        const before = st.project.wires.length;
+        st.addWire({ from: { part: a.part, pin: a.pin }, to: { part: b.part, pin: b.pin }, color: input.color ? String(input.color) : undefined });
+        const added = useStudio.getState().project.wires.length > before;
+        if (b.part !== BOARD_ID) flash(b.part);
+        else if (a.part !== BOARD_ID) flash(a.part);
+        return { result: { ok: true, wire: `${a.text} — ${b.text}`, ...(added ? {} : { note: "already wired" }) }, summary: `Wire ${a.text} — ${b.text}`, ok: true };
+      }
+      case "disconnect": {
+        const a = resolveEndpoint(st.project, String(input.from));
+        if ("error" in a) throw new Error(a.error);
+        const b = input.to ? resolveEndpoint(st.project, String(input.to)) : null;
+        if (b && "error" in b) throw new Error(b.error);
+        const on = (e: { part: string; pin: string }, x: { part: string; pin: string }) => e.part === x.part && e.pin === x.pin;
+        const hit = (w: (typeof st.project.wires)[number]) => (b ? (on(w.from, a) && on(w.to, b)) || (on(w.from, b) && on(w.to, a)) : on(w.from, a) || on(w.to, a));
+        const n = st.project.wires.filter(hit).length;
+        if (!n) throw new Error("no wire there");
+        st.commit((p) => ({ ...p, wires: p.wires.filter((w) => !hit(w)) }));
+        return { result: { ok: true, removed: n }, summary: `Removed ${n} wire${n > 1 ? "s" : ""} at ${a.text}`, ok: true };
+      }
+      case "tidy_wires": {
+        st.tidyWires();
+        return { result: { ok: true, wires: st.project.wires.length }, summary: "Tidied wires", ok: true };
+      }
+      case "write_ladder": {
+        if (getBoard(st.project.boardId).family !== "plc") throw new Error("this project is not on a PLC — call set_mode plc (or new_project with board plc-fx16) first");
+        let prog = ladderFromSpec(input.rungs as RungSpec[], (input.symbols as Record<string, string>) ?? {});
+        if (input.append) {
+          const cur = parseLadder(st.project.code.ladder);
+          prog = { kind: "ladder", rungs: [...cur.rungs, ...prog.rungs], symbols: { ...cur.symbols, ...prog.symbols } };
+        }
+        st.setCode("ladder", serialiseLadder(prog));
+        st.setLang("ladder");
+        useStudio.setState({ dockTab: "code", dockOpen: true });
+        const wasRunning = useStudio.getState().sim.running;
+        if (wasRunning) {
+          await useStudio.getState().stopSim();
+          await useStudio.getState().startSim();
+        }
+        return { result: { ok: true, rungs: prog.rungs.length, restarted: wasRunning, drawing: ladderAscii(prog) }, summary: `Wrote ladder (${prog.rungs.length} rung${prog.rungs.length > 1 ? "s" : ""})`, ok: true };
+      }
+      case "get_ladder": {
+        const prog = parseLadder(st.project.code.ladder);
+        return { result: { ...ladderToSpec(prog), drawing: ladderAscii(prog), ...(st.sim.running ? { live: plcSummary() } : {}) }, summary: "Read the ladder", ok: true };
+      }
+      case "operate": {
+        const inst = findInst(String(input.label));
+        if (!inst || isBoard(inst)) throw new Error("part not found");
+        const def = getPart(inst.type)!;
+        const action = String(input.action);
+        const started = await ensureRunning();
+        const id = inst.id;
+        if (action === "press" || action === "release" || action === "click") {
+          if (!def.pressable) throw new Error(`${inst.label} is not a push control${def.toggle ? " — use toggle" : ""}`);
+          if (action === "release") engine.setInput(id, { pressed: false });
+          else {
+            engine.setInput(id, { pressed: true });
+            if (action === "click") {
+              await simWait(Math.max(50, Math.min(10000, Number(input.hold_ms ?? 300))));
+              engine.setInput(id, { pressed: false });
+            }
+          }
+        } else if (action === "toggle") {
+          if (!def.toggle) throw new Error(`${inst.label} does not latch${def.pressable ? " — use press/click" : ""}`);
+          engine.setInput(id, def.toggle(engine.getInput(id)));
+        } else if (action === "set") {
+          const key = String(input.key ?? "");
+          if (!key || input.value === undefined) throw new Error("set needs key and value");
+          if (def.props.some((p) => p.key === key)) useStudio.getState().setProp(id, key, input.value as number | boolean);
+          else engine.setInput(id, { [key]: input.value as number | boolean });
+        } else throw new Error(`unknown action ${action}`);
+        flash(id);
+        await simWait(250);
+        return {
+          result: { ok: true, ...(started ? { note: "simulation started" } : {}), state: liveSummary(id), ...(getBoard(st.project.boardId).family === "plc" ? { plc: plcSummary() } : {}) },
+          summary: `${action === "toggle" ? "Switched" : action === "set" ? "Set" : action === "release" ? "Released" : "Pressed"} ${inst.label}${def.toggleLabel ? ` → ${def.toggleLabel(engine.getInput(id))}` : ""}`,
+          ok: true,
+        };
+      }
+      case "observe": {
+        const secs = Math.max(0, Math.min(30, Number(input.seconds ?? 2)));
+        const started = await ensureRunning();
+        const n0 = useStudio.getState().serial.length;
+        const t0 = useStudio.getState().snap?.t ?? 0;
+        await simWait(secs * 1000);
+        const now = useStudio.getState();
+        const p = now.project;
+        const board = getBoard(p.boardId);
+        const used = usedBoardPins(p);
+        const pins: Record<string, number> = {};
+        for (const bp of board.pins) if (used.has(bp.id) && now.snap?.pinV[bp.id] !== undefined) pins[bp.label] = round(now.snap.pinV[bp.id], 2);
+        const parts: Record<string, unknown> = {};
+        for (const x of p.parts) if (!isBoard(x) && !isHost(x)) {
+          const l = liveSummary(x.id);
+          if (l) parts[x.label] = l;
+        }
+        return {
+          result: {
+            ok: true,
+            ...(started ? { note: "simulation started" } : {}),
+            sim_time_s: round((now.snap?.t ?? 0) / 1000, 2),
+            elapsed_s: round(((now.snap?.t ?? 0) - t0) / 1000, 2),
+            parts,
+            board_pins_v: pins,
+            ...(board.family === "plc" ? { plc: plcSummary() } : {}),
+            serial: now.serial.slice(n0).slice(-40).map((l) => l.text),
+            diagnostics: now.snap?.diags.map((d) => d.msg) ?? [],
+          },
+          summary: secs ? `Watched ${secs}s of simulation` : "Read the live state",
+          ok: true,
+        };
+      }
       default:
         throw new Error(`unknown tool ${name}`);
     }
@@ -288,7 +582,7 @@ export async function agentAvailable(): Promise<boolean> {
   }
 }
 
-function validate(name: string, input: unknown): string | null {
+export function validate(name: string, input: unknown): string | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return "input must be an object";
   const req: Record<string, string[]> = {
     set_board: ["board"],
@@ -301,6 +595,15 @@ function validate(name: string, input: unknown): string | null {
     set_scenario: ["scenario"],
     simulation: ["action"],
     create_custom_sensor: ["name", "expr"],
+    set_mode: ["mode"],
+    set_view: ["view"],
+    new_project: ["board"],
+    rename_project: ["name"],
+    move_part: ["label"],
+    wire: ["from", "to"],
+    disconnect: ["from"],
+    write_ladder: ["rungs"],
+    operate: ["label", "action"],
   };
   for (const k of req[name] ?? []) if ((input as Record<string, unknown>)[k] === undefined) return `missing ${k}`;
   return null;
