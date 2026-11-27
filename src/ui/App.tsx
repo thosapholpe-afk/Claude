@@ -58,9 +58,9 @@ const RAIL: { id: LeftTab; label: string; icon: typeof Cpu }[] = [
 function Logo() {
   return (
     <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden>
-      <rect width="32" height="32" rx="7" fill="var(--accent-ink-bg)" />
-      <path d="M8 9l6.5 7L8 23M24 9l-6.5 7L24 23" stroke="var(--accent)" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="16" cy="16" r="1.8" fill="var(--accent)" />
+      <rect width="32" height="32" rx="8" fill="#393d47" />
+      <path d="M8 9l6.5 7L8 23M24 9l-6.5 7L24 23" stroke="#ced9e5" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="16" cy="16" r="1.7" fill="#ced9e5" />
     </svg>
   );
 }
@@ -146,7 +146,7 @@ function TopBar() {
           const t = theme === "dark" ? "light" : "dark";
           st.set("theme", t);
           try {
-            localStorage.setItem("xtwin.theme", t);
+            localStorage.setItem("tconnect.theme", t);
           } catch {
             /* ignore */
           }
@@ -170,7 +170,7 @@ function TopBar() {
                 onClick={async () => {
                   await fetch("/auth/logout", { method: "POST" }).catch(() => undefined);
                   try {
-                    localStorage.removeItem("xtwin.localUser");
+                    localStorage.removeItem("tconnect.localUser");
                   } catch {
                     /* ignore */
                   }
@@ -210,7 +210,7 @@ function Toolbar() {
     } else {
       // not a wiring command — hand it to the copilot
       useStudio.setState({ leftTab: "ai" });
-      setTimeout(() => window.dispatchEvent(new CustomEvent("xtwin:ask", { detail: text })), 80);
+      setTimeout(() => window.dispatchEvent(new CustomEvent("tconnect:ask", { detail: text })), 80);
       setCmd("");
     }
   };
@@ -274,13 +274,13 @@ function Toolbar() {
         <button className="btn ghost" onClick={() => st.tidyWires()} title="Route every wire neatly">
           <Wrench size={15} /> <span className="hide-sm">Tidy wires</span>
         </button>
-        <button className="btn icon ghost" onClick={() => window.dispatchEvent(new CustomEvent("xtwin:zoom", { detail: 1.25 }))} aria-label="Zoom in">
+        <button className="btn icon ghost" onClick={() => window.dispatchEvent(new CustomEvent("tconnect:zoom", { detail: 1.25 }))} aria-label="Zoom in">
           <ZoomIn size={16} />
         </button>
-        <button className="btn icon ghost" onClick={() => window.dispatchEvent(new CustomEvent("xtwin:zoom", { detail: 0.8 }))} aria-label="Zoom out">
+        <button className="btn icon ghost" onClick={() => window.dispatchEvent(new CustomEvent("tconnect:zoom", { detail: 0.8 }))} aria-label="Zoom out">
           <ZoomOut size={16} />
         </button>
-        <button className="btn icon ghost" onClick={() => window.dispatchEvent(new Event("xtwin:fit"))} aria-label="Fit to screen" title="Fit (F)">
+        <button className="btn icon ghost" onClick={() => window.dispatchEvent(new Event("tconnect:fit"))} aria-label="Fit to screen" title="Fit (F)">
           <Maximize size={16} />
         </button>
         <button className={`btn ghost diag-pill ${errs ? "bad" : diag.length ? "warn" : ""}`} onClick={() => useStudio.setState({ dockTab: "diag", dockOpen: true })} title="Electrical checks">

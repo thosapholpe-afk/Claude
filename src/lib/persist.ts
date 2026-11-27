@@ -1,8 +1,8 @@
 import type { CustomSensorDef, Project } from "../core/types";
 
-const CUR = "xtwin.current";
-const LIST = "xtwin.projects";
-const SENSORS = "xtwin.customSensors";
+const CUR = "tconnect.current";
+const LIST = "tconnect.projects";
+const SENSORS = "tconnect.customSensors";
 
 const safe = <T>(fn: () => T, fallback: T): T => {
   try {
@@ -23,14 +23,14 @@ export function loadProject(): Project | null {
   return safe(() => {
     const id = localStorage.getItem(CUR);
     if (!id) return null;
-    const raw = localStorage.getItem(`xtwin.project.${id}`);
+    const raw = localStorage.getItem(`tconnect.project.${id}`);
     return raw ? (JSON.parse(raw) as Project) : null;
   }, null);
 }
 
 export function saveProject(p: Project) {
   safe(() => {
-    localStorage.setItem(`xtwin.project.${p.id}`, JSON.stringify(p));
+    localStorage.setItem(`tconnect.project.${p.id}`, JSON.stringify(p));
     localStorage.setItem(CUR, p.id);
     const list = listProjects().filter((m) => m.id !== p.id);
     list.unshift({ id: p.id, name: p.name, boardId: p.boardId, updatedAt: p.updatedAt });
@@ -44,14 +44,14 @@ export function listProjects(): ProjectMeta[] {
 
 export function openProject(id: string): Project | null {
   return safe(() => {
-    const raw = localStorage.getItem(`xtwin.project.${id}`);
+    const raw = localStorage.getItem(`tconnect.project.${id}`);
     return raw ? (JSON.parse(raw) as Project) : null;
   }, null);
 }
 
 export function deleteProject(id: string) {
   safe(() => {
-    localStorage.removeItem(`xtwin.project.${id}`);
+    localStorage.removeItem(`tconnect.project.${id}`);
     localStorage.setItem(LIST, JSON.stringify(listProjects().filter((m) => m.id !== id)));
   }, undefined);
 }

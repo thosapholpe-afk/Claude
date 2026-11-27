@@ -30,7 +30,7 @@ function HeaderPins({ def }: { def: PartDef }) {
       {def.pins.map((p) => (
         <g key={p.id}>
           <rect x={p.x - 1.1} y={p.y - 1.1} width={2.2} height={2.2} fill="#141518" rx={0.2} />
-          <rect x={p.x - 0.4} y={p.y - 0.4} width={0.8} height={0.8} fill="url(#xt-gold)" />
+          <rect x={p.x - 0.4} y={p.y - 0.4} width={0.8} height={0.8} fill="url(#tc-gold)" />
         </g>
       ))}
     </g>
@@ -58,7 +58,7 @@ function PinLabels({ def, side, color = "#f1f5f2" }: { def: PartDef; side: "top"
 function Pcb({ w, h, color, rx = 1 }: { w: number; h: number; color: string; rx?: number }) {
   return (
     <g>
-      <rect x={0.4} y={0.8} width={w} height={h} rx={rx} fill="#000" opacity={0.3} filter="url(#xt-soft)" />
+      <rect x={0.4} y={0.8} width={w} height={h} rx={rx} fill="#000" opacity={0.3} filter="url(#tc-soft)" />
       <rect width={w} height={h} rx={rx} fill={color} stroke="rgba(255,255,255,.18)" strokeWidth={0.25} />
     </g>
   );
@@ -67,7 +67,7 @@ function Pcb({ w, h, color, rx = 1 }: { w: number; h: number; color: string; rx?
 function IndicatorLed({ x, y, on, color = "#ff3b30" }: { x: number; y: number; on: boolean; color?: string }) {
   return (
     <g>
-      {on && <circle cx={x} cy={y} r={2.6} fill={color} opacity={0.55} filter="url(#xt-glow)" />}
+      {on && <circle cx={x} cy={y} r={2.6} fill={color} opacity={0.55} filter="url(#tc-glow)" />}
       <rect x={x - 0.75} y={y - 0.45} width={1.5} height={0.9} rx={0.2} fill={on ? color : "#4d3b35"} />
     </g>
   );
@@ -94,13 +94,13 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           <Legs pins={def.pins} top={7} />
           {b > 0.02 && (
             <>
-              <circle cx={2.54} cy={3.3} r={8 + b * 5} fill={color} opacity={Math.min(0.55, b * 0.45)} filter="url(#xt-glow-lg)" />
-              <circle cx={2.54} cy={3.3} r={4.2} fill={color} opacity={Math.min(0.9, b * 0.8)} filter="url(#xt-glow)" />
+              <circle cx={2.54} cy={3.3} r={8 + b * 5} fill={color} opacity={Math.min(0.55, b * 0.45)} filter="url(#tc-glow-lg)" />
+              <circle cx={2.54} cy={3.3} r={4.2} fill={color} opacity={Math.min(0.9, b * 0.8)} filter="url(#tc-glow)" />
             </>
           )}
           <rect x={0.04} y={6.4} width={5} height={1.1} rx={0.3} fill={L.burnt ? "#3a2a20" : color} opacity={0.85} />
           <path d="M0.3 6.6 V3.2 A2.24 2.24 0 0 1 4.78 3.2 V6.6 Z" fill={L.burnt ? "#3b2b22" : color} opacity={L.burnt ? 1 : 0.55 + Math.min(0.45, b * 0.45)} />
-          <path d="M0.3 6.6 V3.2 A2.24 2.24 0 0 1 4.78 3.2 V6.6 Z" fill="url(#xt-dome)" />
+          <path d="M0.3 6.6 V3.2 A2.24 2.24 0 0 1 4.78 3.2 V6.6 Z" fill="url(#tc-dome)" />
           {b > 0.05 && <circle cx={2.54} cy={3.6} r={1 + b * 0.6} fill="#fff" opacity={Math.min(0.95, b * 0.8)} />}
           {L.burnt && <Smoke x={2.54} y={1} t={t} />}
           <text x={4.4} y={10.2} fontSize={1.3} fill="#9fb0a7" fontFamily="Chakra Petch">
@@ -116,9 +116,9 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
       return (
         <g>
           <Legs pins={def.pins} top={7.5} />
-          {b > 0.02 && <circle cx={5.08} cy={3.6} r={9} fill={c} opacity={Math.min(0.6, b * 0.5)} filter="url(#xt-glow-lg)" />}
+          {b > 0.02 && <circle cx={5.08} cy={3.6} r={9} fill={c} opacity={Math.min(0.6, b * 0.5)} filter="url(#tc-glow-lg)" />}
           <path d="M2.3 7.2 V3.7 A2.78 2.78 0 0 1 7.86 3.7 V7.2 Z" fill={b > 0.02 ? c : "#eef0f2"} opacity={0.9} />
-          <path d="M2.3 7.2 V3.7 A2.78 2.78 0 0 1 7.86 3.7 V7.2 Z" fill="url(#xt-dome)" />
+          <path d="M2.3 7.2 V3.7 A2.78 2.78 0 0 1 7.86 3.7 V7.2 Z" fill="url(#tc-dome)" />
           <g fontSize={1.1} fill="#9fb0a7" fontFamily="Chakra Petch" textAnchor="middle">
             {def.pins.map((p) => (
               <text key={p.id} x={p.x} y={p.y + 2.4}>
@@ -148,7 +148,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
       return (
         <g>
           <rect x={0.3} y={0.3} width={7} height={7} rx={0.8} fill="#1d1f22" stroke="#000" strokeWidth={0.2} />
-          <rect x={0.9} y={0.9} width={5.8} height={5.8} rx={0.5} fill="url(#xt-metal)" opacity={0.6} />
+          <rect x={0.9} y={0.9} width={5.8} height={5.8} rx={0.5} fill="url(#tc-metal)" opacity={0.6} />
           <circle cx={3.81} cy={3.81} r={pressed ? 2.1 : 2.4} fill={cap} stroke="rgba(0,0,0,.4)" strokeWidth={0.25} />
           {!pressed && <circle cx={3.2} cy={3.1} r={0.8} fill="#fff" opacity={0.3} />}
         </g>
@@ -252,14 +252,14 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           <Pcb w={45} h={20.5} color="#1d5fa8" />
           {[11.2, 33.8].map((cx, i) => (
             <g key={i}>
-              <circle cx={cx} cy={9} r={8} fill="url(#xt-metal)" stroke="#7d8790" strokeWidth={0.3} />
-              <circle cx={cx} cy={9} r={6.2} fill="url(#xt-mesh)" />
+              <circle cx={cx} cy={9} r={8} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+              <circle cx={cx} cy={9} r={6.2} fill="url(#tc-mesh)" />
               <text x={cx} y={18.6} fontSize={1.4} fill="#fff" textAnchor="middle" fontFamily="Chakra Petch">
                 {i ? "R" : "T"}
               </text>
             </g>
           ))}
-          <rect x={20.5} y={2} width={4} height={2} rx={0.6} fill="url(#xt-metal)" />
+          <rect x={20.5} y={2} width={4} height={2} rx={0.6} fill="url(#tc-metal)" />
           <HeaderPins def={def} />
           <PinLabels def={def} side="top" />
         </g>
@@ -269,7 +269,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
         <g>
           <Legs pins={def.pins} top={20} />
           <rect x={0.1} y={0} width={15.1} height={20} rx={1.2} fill="#f3f3ef" stroke="#c8c8bf" strokeWidth={0.25} />
-          <rect x={1.2} y={1.2} width={12.9} height={12.6} fill="url(#xt-vents)" />
+          <rect x={1.2} y={1.2} width={12.9} height={12.6} fill="url(#tc-vents)" />
           <text x={7.6} y={17.4} fontSize={1.8} textAnchor="middle" fill="#5a5a55" fontFamily="Chakra Petch" fontWeight={700}>
             {String(inst.props.model ?? "DHT22")}
           </text>
@@ -339,8 +339,8 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
       return (
         <g>
           <Pcb w={32} h={22} color="#1d5fa8" />
-          <circle cx={16} cy={9.5} r={8.6} fill="url(#xt-metal)" stroke="#7d8790" strokeWidth={0.3} />
-          <circle cx={16} cy={9.5} r={6.8} fill="url(#xt-mesh)" />
+          <circle cx={16} cy={9.5} r={8.6} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <circle cx={16} cy={9.5} r={6.8} fill="url(#tc-mesh)" />
           <circle cx={16} cy={9.5} r={6.8} fill="#ff6a00" opacity={L.powered ? 0.12 + 0.08 * Math.sin(t * 3) : 0} />
           <IndicatorLed x={3} y={4} on={!!L.powered} />
           <IndicatorLed x={3} y={8} on={!!L.indicator} color="#33ff88" />
@@ -368,7 +368,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
       return (
         <g>
           <Pcb w={32} h={14} color="#1d5fa8" />
-          <rect x={2} y={3.5} width={11} height={7} rx={3.5} fill="url(#xt-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <rect x={2} y={3.5} width={11} height={7} rx={3.5} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
           <TrimPot x={17.5} y={7} />
           <IndicatorLed x={24} y={3.6} on={!!L.powered} />
           <IndicatorLed x={24} y={10.4} on={!!L.indicator} color="#33ff88" />
@@ -396,7 +396,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
       return (
         <g>
           <Pcb w={34} h={15} color="#1d5fa8" />
-          <circle cx={-0.5} cy={7.5} r={4.8} fill="url(#xt-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <circle cx={-0.5} cy={7.5} r={4.8} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
           <circle cx={-0.5} cy={7.5} r={3.6} fill="#1c1d20" />
           <TrimPot x={11} y={7.5} />
           <rect x={17} y={4.8} width={5} height={5.4} rx={0.3} fill="#1b1d20" />
@@ -420,9 +420,9 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           </text>
           <rect x={41} y={4.5} width={8} height={17} rx={0.5} fill="#1e5bd6" stroke="#0f3a92" strokeWidth={0.3} />
           {[7.92, 13, 18.08].map((y) => (
-            <circle key={y} cx={45} cy={y} r={1.6} fill="url(#xt-metal)" />
+            <circle key={y} cx={45} cy={y} r={1.6} fill="url(#tc-metal)" />
           ))}
-          <g stroke={on ? "#3dffa8" : "#f4f4f4"} strokeWidth={0.5} fill="none" opacity={0.8}>
+          <g stroke={on ? "#ced9e5" : "#8b93a1"} strokeWidth={0.5} fill="none" opacity={0.8}>
             <path d={on ? "M37 13 L40 8.2" : "M37 13 L40 17.8"} />
           </g>
           <IndicatorLed x={8} y={6} on={!!L.powered} />
@@ -440,10 +440,10 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           <HeaderPins def={def} />
           <line x1={1.27} y1={7.46} x2={9} y2={8.5} stroke="#d8302a" strokeWidth={0.7} />
           <line x1={1.27} y1={12.54} x2={9} y2={11.5} stroke="#222" strokeWidth={0.7} />
-          <circle cx={19.5} cy={10} r={9.5} fill="url(#xt-metal)" stroke="#7d8790" strokeWidth={0.3} />
+          <circle cx={19.5} cy={10} r={9.5} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
           <g transform={`rotate(${rot} 19.5 10)`} opacity={0.9}>
             {[0, 120, 240].map((a) => (
-              <path key={a} transform={`rotate(${a} 19.5 10)`} d="M19.5 10 C 21 6, 24 3.5, 22.5 1.5 C 20 2, 18.6 6, 19.5 10 Z" fill="#3dffa8" opacity={0.55} />
+              <path key={a} transform={`rotate(${a} 19.5 10)`} d="M19.5 10 C 21 6, 24 3.5, 22.5 1.5 C 20 2, 18.6 6, 19.5 10 Z" fill="#ced9e5" opacity={0.55} />
             ))}
             <circle cx={19.5} cy={10} r={1.5} fill="#333" />
           </g>
@@ -459,7 +459,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           {[2.5, 77.5].flatMap((x) => [2.5, 33.5].map((y) => <circle key={`${x}${y}`} cx={x} cy={y} r={1.4} fill="#0b0f0d" stroke="#c8a044" strokeWidth={0.5} />))}
           <rect x={4.5} y={5.5} width={71} height={25} rx={1} fill="#0b0d0e" />
           <rect x={7.5} y={9} width={65} height={18} fill={lit ? "#8fd14f" : "#3b4a2c"} />
-          {lit && <rect x={7.5} y={9} width={65} height={18} fill="#c8ff7a" opacity={0.15} filter="url(#xt-glow)" />}
+          {lit && <rect x={7.5} y={9} width={65} height={18} fill="#c8ff7a" opacity={0.15} filter="url(#tc-glow)" />}
           <g fontFamily="IBM Plex Mono, monospace" fontSize={5.2} fill={lit ? "#10240a" : "#1c2a14"}>
             {[0, 1].map((r) => (
               <g key={r}>
@@ -500,7 +500,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
             const col = `rgb(${r},${g},${b})`;
             return (
               <g key={i}>
-                {on && <circle cx={x} cy={y} r={4.5} fill={col} opacity={0.6} filter="url(#xt-glow)" />}
+                {on && <circle cx={x} cy={y} r={4.5} fill={col} opacity={0.6} filter="url(#tc-glow)" />}
                 <rect x={x - 2.5} y={y - 2.5} width={5} height={5} rx={0.5} fill={on ? col : "#efefe9"} transform={`rotate(${(a * 180) / Math.PI} ${x} ${y})`} />
               </g>
             );
@@ -549,7 +549,7 @@ const Breadboard = memo(function Breadboard({ def }: { def: PartDef }) {
   const H = def.h;
   return (
     <g>
-      <rect x={0.5} y={1} width={W} height={H} rx={1.5} fill="#000" opacity={0.25} filter="url(#xt-soft)" />
+      <rect x={0.5} y={1} width={W} height={H} rx={1.5} fill="#000" opacity={0.25} filter="url(#tc-soft)" />
       <rect width={W} height={H} rx={1.5} fill="#f1efe6" stroke="#d6d2c2" strokeWidth={0.3} />
       <rect x={1} y={2.54 * 9.2} width={W - 2} height={2.54 * 0.6 + 2.6} fill="#dcd8ca" />
       {[

@@ -238,7 +238,7 @@ export function CustomSensorModal() {
           >
             Save & add to canvas
           </button>
-          <button className="btn wide" onClick={() => download(`${slug}.xtwin-sensor.json`, JSON.stringify(full, null, 2), "application/json")}>
+          <button className="btn wide" onClick={() => download(`${slug}.tconnect-sensor.json`, JSON.stringify(full, null, 2), "application/json")}>
             Export JSON
           </button>
           <label className="btn wide">
@@ -472,8 +472,8 @@ export function ScanModal() {
                 const def = boardFromScan(res);
                 registerCustomBoard(def);
                 try {
-                  const list = JSON.parse(localStorage.getItem("xtwin.customBoards") ?? "[]") as BoardDef[];
-                  localStorage.setItem("xtwin.customBoards", JSON.stringify([...list.filter((b) => b.id !== def.id), def]));
+                  const list = JSON.parse(localStorage.getItem("tconnect.customBoards") ?? "[]") as BoardDef[];
+                  localStorage.setItem("tconnect.customBoards", JSON.stringify([...list.filter((b) => b.id !== def.id), def]));
                 } catch {
                   /* ignore */
                 }
@@ -508,7 +508,7 @@ export function ScanModal() {
 
 export function loadCustomBoards() {
   try {
-    const list = JSON.parse(localStorage.getItem("xtwin.customBoards") ?? "[]") as BoardDef[];
+    const list = JSON.parse(localStorage.getItem("tconnect.customBoards") ?? "[]") as BoardDef[];
     for (const b of list) registerCustomBoard(b);
   } catch {
     /* ignore */
@@ -531,7 +531,7 @@ export function ProjectsModal() {
             onClick={() => {
               setProject(blankProject(b.id, `New ${b.short} circuit`));
               set("modal", null);
-              window.dispatchEvent(new Event("xtwin:fit"));
+              window.dispatchEvent(new Event("tconnect:fit"));
             }}
           >
             <FilePlus2 size={13} /> New {b.short}
@@ -541,7 +541,7 @@ export function ProjectsModal() {
           <Upload size={13} /> Import project
           <input
             type="file"
-            accept=".json,.tcproj,.xtwin"
+            accept=".json,.tcproj"
             hidden
             onChange={async (e) => {
               const f = e.target.files?.[0];

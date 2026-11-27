@@ -48,7 +48,7 @@ export const DEFAULT_CASE: CaseParams = {
 
 export const DEFAULT_MQTT: MqttConfig = {
   url: "wss://broker.hivemq.com:8884/mqtt",
-  clientId: `xtwin-${Math.random().toString(16).slice(2, 8)}`,
+  clientId: `tconnect-${Math.random().toString(16).slice(2, 8)}`,
   username: "",
   password: "",
   prefix: "thosaphol/demo",
@@ -159,7 +159,7 @@ export const useStudio = create<State>((set, get) => ({
   leftTab: "parts",
   dockTab: "code",
   dockOpen: true,
-  theme: (typeof localStorage !== "undefined" && (localStorage.getItem("xtwin.theme") as "dark" | "light")) || "dark",
+  theme: (typeof localStorage !== "undefined" && (localStorage.getItem("tconnect.theme") as "dark" | "light")) || "dark",
   sim: { running: false, paused: false, speed: 1 },
   snap: null,
   serial: [],

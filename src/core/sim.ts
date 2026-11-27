@@ -545,7 +545,7 @@ export class SimEngine implements Hal {
       fn = new AsyncFunction(...names, js);
     } catch (e) {
       this.emitSerial([{ t: this.t, text: `✖ Compile error: ${(e as Error).message}`, kind: "err" }]);
-      console.debug("[xtwin] generated JS:\n" + js);
+      console.debug("[thosaphol-connect] generated JS:\n" + js);
       this.setRunning(false);
       this.publishFrame(0, false);
       return;

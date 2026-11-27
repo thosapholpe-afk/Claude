@@ -102,7 +102,7 @@ function HeroScene() {
             r={(2 + (i % 3)) * fire * (1 - ((t * 0.8 + i / 14) % 1))}
             fill={i % 3 ? "#ff7a1a" : "#ffd23f"}
             opacity={0.75}
-            filter="url(#xt-glow)"
+            filter="url(#tc-glow)"
           />
         ))}
       </g>
@@ -140,9 +140,9 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
       <header className="land-top">
         <div className="brand">
           <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden>
-            <rect width="32" height="32" rx="7" fill="var(--accent-ink-bg)" />
-            <path d="M8 9l6.5 7L8 23M24 9l-6.5 7L24 23" stroke="var(--accent)" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="16" cy="16" r="1.8" fill="var(--accent)" />
+            <rect width="32" height="32" rx="8" fill="#393d47" />
+            <path d="M8 9l6.5 7L8 23M24 9l-6.5 7L24 23" stroke="#ced9e5" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="16" cy="16" r="1.7" fill="#ced9e5" />
           </svg>
           <span className="wordmark">Thosaphol Connect</span>
         </div>
@@ -296,7 +296,7 @@ export function useAuth() {
 
 function restoreLocal() {
   try {
-    const raw = localStorage.getItem("xtwin.localUser");
+    const raw = localStorage.getItem("tconnect.localUser");
     if (raw) useStudio.setState({ user: JSON.parse(raw) as User });
   } catch {
     /* ignore */
@@ -307,7 +307,7 @@ export function startLocal() {
   const name = (prompt("What should we call you?", "") ?? "").trim() || "Maker";
   const u: User = { id: `local-${Date.now()}`, name, provider: "local", local: true };
   try {
-    localStorage.setItem("xtwin.localUser", JSON.stringify(u));
+    localStorage.setItem("tconnect.localUser", JSON.stringify(u));
   } catch {
     /* ignore */
   }

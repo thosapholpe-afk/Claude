@@ -21,7 +21,7 @@ const PORT = Number(process.env.PORT ?? 8787);
 const PUBLIC_URL = (process.env.PUBLIC_URL ?? "http://localhost:5173").replace(/\/$/, "");
 const PROD = process.env.NODE_ENV === "production";
 const SECRET = process.env.SESSION_SECRET ?? crypto.randomBytes(32).toString("hex");
-if (!process.env.SESSION_SECRET) console.warn("[xtwin] SESSION_SECRET is not set — sessions reset when the server restarts.");
+if (!process.env.SESSION_SECRET) console.warn("[thosaphol-connect] SESSION_SECRET is not set — sessions reset when the server restarts.");
 
 // ------------------------------------------------------------------ user store
 interface StoredUser {
@@ -74,7 +74,7 @@ function verify<T>(token: string | undefined): T | null {
 }
 const cookieOpts = { httpOnly: true, sameSite: "lax" as const, secure: PROD, path: "/" };
 function currentUser(req: Request): StoredUser | null {
-  const s = verify<{ uid: string }>(req.cookies?.xt_session);
+  const s = verify<{ uid: string }>(req.cookies?.tc_session);
   return s ? users[s.uid] ?? null : null;
 }
 
@@ -107,10 +107,10 @@ async function recordToForm(fields: { name: string; email?: string; provider: st
       body,
       redirect: "manual",
     });
-    if (r.status >= 400) console.warn(`[xtwin] Google Form responded ${r.status} — check GFORM_ID and entry IDs`);
+    if (r.status >= 400) console.warn(`[thosaphol-connect] Google Form responded ${r.status} — check GFORM_ID and entry IDs`);
     return r.status < 400;
   } catch (e) {
-    console.warn("[xtwin] Google Form submit failed:", (e as Error).message);
+    console.warn("[thosaphol-connect] Google Form submit failed:", (e as Error).message);
     return false;
   }
 }
@@ -133,7 +133,7 @@ interface Provider {
   profile: (accessToken: string, tokenJson: Record<string, unknown>) => Promise<Profile>;
 }
 const getJson = async (url: string, headers: Record<string, string> = {}) => {
-  const r = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "xtwin-app", ...headers } });
+  const r = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "thosaphol-connect", ...headers } });
   if (!r.ok) throw new Error(`${url} → ${r.status}`);
   return (await r.json()) as Record<string, unknown>;
 };
@@ -164,7 +164,7 @@ const PROVIDERS: Record<string, Provider> = {
       let email = p.email as string | undefined;
       if (!email) {
         try {
-          const r = await fetch("https://api.github.com/user/emails", { headers: { ...h, "User-Agent": "xtwin-app" } });
+          const r = await fetch("https://api.github.com/user/emails", { headers: { ...h, "User-Agent": "thosaphol-connect" } });
           const list = (await r.json()) as { email: string; primary: boolean }[];
           email = list.find((e) => e.primary)?.email;
         } catch {
@@ -217,15 +217,15 @@ app.get("/auth/:provider", (req, res) => {
     return;
   }
   const state = crypto.randomBytes(16).toString("hex");
-  res.cookie("xt_oauth", sign({ state, p: p.id, exp: Date.now() + 10 * 60_000 }), { ...cookieOpts, maxAge: 10 * 60_000 });
+  res.cookie("tc_oauth", sign({ state, p: p.id, exp: Date.now() + 10 * 60_000 }), { ...cookieOpts, maxAge: 10 * 60_000 });
   const q = new URLSearchParams({ client_id: p.clientId!, redirect_uri: redirectUri(p.id), response_type: "code", scope: p.scope, state, ...(p.extraAuth ?? {}) });
   res.redirect(`${p.authorize}?${q}`);
 });
 
 app.get("/auth/:provider/callback", async (req, res) => {
   const p = PROVIDERS[req.params.provider];
-  const st = verify<{ state: string; p: string }>(req.cookies?.xt_oauth);
-  res.clearCookie("xt_oauth", cookieOpts);
+  const st = verify<{ state: string; p: string }>(req.cookies?.tc_oauth);
+  res.clearCookie("tc_oauth", cookieOpts);
   if (!p || !enabled(p) || !st || st.p !== p.id || st.state !== req.query.state || typeof req.query.code !== "string") {
     res.redirect(`${PUBLIC_URL}/?login=failed`);
     return;
@@ -247,16 +247,16 @@ app.get("/auth/:provider/callback", async (req, res) => {
     if (existing && !existing.needsProfile && process.env.GFORM_LOG_LOGINS === "true") {
       void recordToForm({ name: existing.name, email: existing.email, provider: p.id, role: existing.role, org: existing.organization, event: "login" });
     }
-    res.cookie("xt_session", sign({ uid: id, exp: Date.now() + 30 * 86_400_000 }), { ...cookieOpts, maxAge: 30 * 86_400_000 });
+    res.cookie("tc_session", sign({ uid: id, exp: Date.now() + 30 * 86_400_000 }), { ...cookieOpts, maxAge: 30 * 86_400_000 });
     res.redirect(`${PUBLIC_URL}/?login=ok`);
   } catch (e) {
-    console.error("[xtwin] OAuth error:", (e as Error).message);
+    console.error("[thosaphol-connect] OAuth error:", (e as Error).message);
     res.redirect(`${PUBLIC_URL}/?login=failed`);
   }
 });
 
 app.post("/auth/logout", (_req, res) => {
-  res.clearCookie("xt_session", cookieOpts);
+  res.clearCookie("tc_session", cookieOpts);
   res.json({ ok: true });
 });
 
@@ -425,8 +425,8 @@ if (fs.existsSync(dist)) {
 
 app.listen(PORT, () => {
   const on = Object.values(PROVIDERS).filter(enabled).map((p) => p.id);
-  console.log(`[xtwin] API on http://localhost:${PORT} · public URL ${PUBLIC_URL}`);
-  console.log(`[xtwin] sign-in providers: ${on.length ? on.join(", ") : "none configured (guest/local mode only)"}`);
-  console.log(`[xtwin] copilot: ${anthropic ? `Claude (${AGENT_MODEL})` : "offline assistant (no ANTHROPIC_API_KEY)"}`);
-  console.log(`[xtwin] Google Form logging: ${FORM.id && FORM.name ? "on" : "off"}`);
+  console.log(`[thosaphol-connect] API on http://localhost:${PORT} · public URL ${PUBLIC_URL}`);
+  console.log(`[thosaphol-connect] sign-in providers: ${on.length ? on.join(", ") : "none configured (guest/local mode only)"}`);
+  console.log(`[thosaphol-connect] copilot: ${anthropic ? `Claude (${AGENT_MODEL})` : "offline assistant (no ANTHROPIC_API_KEY)"}`);
+  console.log(`[thosaphol-connect] Google Form logging: ${FORM.id && FORM.name ? "on" : "off"}`);
 });

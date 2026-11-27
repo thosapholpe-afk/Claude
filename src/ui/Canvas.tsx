@@ -104,8 +104,8 @@ export function Canvas() {
       requestAnimationFrame(fit);
     }
     const onFit = () => fit();
-    window.addEventListener("xtwin:fit", onFit);
-    return () => window.removeEventListener("xtwin:fit", onFit);
+    window.addEventListener("tconnect:fit", onFit);
+    return () => window.removeEventListener("tconnect:fit", onFit);
   }, [fit]);
   // refit when a template/project replaces everything
   const partsKey = project.parts.length + project.boardId + project.name;
@@ -170,8 +170,8 @@ export function Canvas() {
         return { k, tx: mx - ((mx - v.tx) / v.k) * k, ty: my - ((my - v.ty) / v.k) * k };
       });
     };
-    window.addEventListener("xtwin:zoom", zoom);
-    return () => window.removeEventListener("xtwin:zoom", zoom);
+    window.addEventListener("tconnect:zoom", zoom);
+    return () => window.removeEventListener("tconnect:zoom", zoom);
   }, []);
 
   const parts = useMemo(() => {
@@ -290,7 +290,7 @@ export function Canvas() {
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const type = e.dataTransfer.getData("application/x-xtwin-part");
+    const type = e.dataTransfer.getData("application/x-tconnect-part");
     if (!type) return;
     const w = toWorld(e.clientX, e.clientY);
     useStudio.getState().addPart(type, w);
@@ -318,7 +318,7 @@ export function Canvas() {
         <path d={d} stroke="rgba(0,0,0,.55)" strokeWidth={1.25} fill="none" strokeLinecap="round" />
         <path d={d} stroke={w.color} strokeWidth={0.85} fill="none" strokeLinecap="round" />
         <path d={d} stroke="#fff" strokeWidth={0.22} fill="none" opacity={0.28} strokeLinecap="round" transform="translate(-0.18 -0.18)" />
-        {live && <path d={d} className="flow" stroke={v > 4 ? "#ffe066" : "var(--accent)"} strokeWidth={0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
+        {live && <path d={d} className="flow" stroke={v > 4 ? "#e6d1a6" : "var(--accent)"} strokeWidth={0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
         <circle cx={a.x} cy={a.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
         <circle cx={b.x} cy={b.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
       </g>

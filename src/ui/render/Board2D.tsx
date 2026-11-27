@@ -34,7 +34,7 @@ function headerStrips(pins: BoardPin[]) {
 }
 
 function ConnectorShape({ c }: { c: Connector }) {
-  const metal = "url(#xt-metal)";
+  const metal = "url(#tc-metal)";
   switch (c.kind) {
     case "usb-b":
       return (
@@ -134,7 +134,7 @@ export const Board2D = memo(function Board2D({
           <stop offset="1" stopColor={shade(board.pcbColor, -14)} />
         </linearGradient>
       </defs>
-      <rect x={0.6} y={1.4} width={W} height={H} rx={2.2} fill="#000" opacity={0.35} filter="url(#xt-soft)" />
+      <rect x={0.6} y={1.4} width={W} height={H} rx={2.2} fill="#000" opacity={0.35} filter="url(#tc-soft)" />
       <rect x={0} y={0} width={W} height={H} rx={board.family === "bcm2711" ? 3 : 1.6} fill={`url(#pcb-${board.id})`} stroke={shade(board.pcbColor, 35)} strokeWidth={0.3} />
       {/* fine traces for texture */}
       <g opacity={0.16} stroke={shade(board.pcbColor, 60)} strokeWidth={0.25} fill="none">
@@ -151,7 +151,7 @@ export const Board2D = memo(function Board2D({
       {board.chips.map((c, i) => (
         <g key={i}>
           <rect x={c.x + 0.3} y={c.y + 0.5} width={c.w} height={c.h} rx={0.5} fill="#000" opacity={0.3} />
-          <rect x={c.x} y={c.y} width={c.w} height={c.h} rx={c.metal ? 0.6 : 0.4} fill={c.metal ? "url(#xt-metal)" : c.color} stroke={c.metal ? "#8c959d" : "#000"} strokeWidth={0.2} />
+          <rect x={c.x} y={c.y} width={c.w} height={c.h} rx={c.metal ? 0.6 : 0.4} fill={c.metal ? "url(#tc-metal)" : c.color} stroke={c.metal ? "#8c959d" : "#000"} strokeWidth={0.2} />
           {board.id === "esp32-devkit-v1" && i === 0 && (
             <g>
               <rect x={c.x + 0.6} y={c.y + 0.6} width={c.w - 6.5} height={c.h - 1.2} rx={0.4} fill="#c3c7cc" stroke="#9aa1a8" strokeWidth={0.15} />
@@ -177,7 +177,7 @@ export const Board2D = memo(function Board2D({
         <rect key={i} x={s.x} y={s.y} width={s.w} height={s.h} rx={0.3} fill="#131416" stroke="#050505" strokeWidth={0.15} />
       ))}
       {board.pins.map((p) => (
-        <rect key={p.id} x={p.x - 0.42} y={p.y - 0.42} width={0.84} height={0.84} fill="url(#xt-gold)" />
+        <rect key={p.id} x={p.x - 0.42} y={p.y - 0.42} width={0.84} height={0.84} fill="url(#tc-gold)" />
       ))}
       {showLabels &&
         board.pins.map((p) => {
@@ -226,7 +226,7 @@ export const Board2D = memo(function Board2D({
 function StatusLed({ x, y, color, on, label }: { x: number; y: number; color: string; on: boolean; label: string }) {
   return (
     <g>
-      {on && <circle cx={x} cy={y} r={3.2} fill={color} opacity={0.35} filter="url(#xt-glow)" />}
+      {on && <circle cx={x} cy={y} r={3.2} fill={color} opacity={0.35} filter="url(#tc-glow)" />}
       <rect x={x - 0.8} y={y - 0.5} width={1.6} height={1} rx={0.2} fill={on ? color : "#5b4a3e"} />
       <text x={x + 1.4} y={y + 0.45} fontSize={0.9} fill="#e9efe9" opacity={0.75} fontFamily="Chakra Petch, sans-serif">
         {label}
@@ -239,36 +239,36 @@ function StatusLed({ x, y, color, on, label }: { x: number; y: number; color: st
 export function SvgDefs() {
   return (
     <defs>
-      <linearGradient id="xt-metal" x1="0" y1="0" x2="1" y2="1">
+      <linearGradient id="tc-metal" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stopColor="#eef1f4" />
         <stop offset="0.45" stopColor="#b7bec5" />
         <stop offset="0.7" stopColor="#dfe3e7" />
         <stop offset="1" stopColor="#8f979f" />
       </linearGradient>
-      <linearGradient id="xt-gold" x1="0" y1="0" x2="1" y2="1">
+      <linearGradient id="tc-gold" x1="0" y1="0" x2="1" y2="1">
         <stop offset="0" stopColor="#ffe9a6" />
         <stop offset="0.5" stopColor="#d6a93c" />
         <stop offset="1" stopColor="#a57a1f" />
       </linearGradient>
-      <radialGradient id="xt-dome" cx="0.35" cy="0.3" r="0.8">
+      <radialGradient id="tc-dome" cx="0.35" cy="0.3" r="0.8">
         <stop offset="0" stopColor="#fff" stopOpacity={0.75} />
         <stop offset="0.35" stopColor="#fff" stopOpacity={0.12} />
         <stop offset="1" stopColor="#000" stopOpacity={0.15} />
       </radialGradient>
-      <filter id="xt-glow" x="-200%" y="-200%" width="500%" height="500%">
+      <filter id="tc-glow" x="-200%" y="-200%" width="500%" height="500%">
         <feGaussianBlur stdDeviation="1.6" />
       </filter>
-      <filter id="xt-glow-lg" x="-300%" y="-300%" width="700%" height="700%">
+      <filter id="tc-glow-lg" x="-300%" y="-300%" width="700%" height="700%">
         <feGaussianBlur stdDeviation="4" />
       </filter>
-      <filter id="xt-soft" x="-20%" y="-20%" width="140%" height="140%">
+      <filter id="tc-soft" x="-20%" y="-20%" width="140%" height="140%">
         <feGaussianBlur stdDeviation="1.4" />
       </filter>
-      <pattern id="xt-mesh" width="0.9" height="0.9" patternUnits="userSpaceOnUse">
+      <pattern id="tc-mesh" width="0.9" height="0.9" patternUnits="userSpaceOnUse">
         <rect width="0.9" height="0.9" fill="#c4cad0" />
         <circle cx="0.45" cy="0.45" r="0.28" fill="#6d757c" />
       </pattern>
-      <pattern id="xt-vents" width="1.6" height="1.6" patternUnits="userSpaceOnUse">
+      <pattern id="tc-vents" width="1.6" height="1.6" patternUnits="userSpaceOnUse">
         <rect width="1.6" height="1.6" fill="#f3f3ef" />
         <rect x="0.35" y="0.35" width="0.9" height="0.9" rx="0.15" fill="#c9cbc4" />
       </pattern>

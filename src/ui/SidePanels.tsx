@@ -97,7 +97,7 @@ export function PartsPanel() {
                 className="card-pick"
                 draggable
                 onDragStart={(e) => {
-                  e.dataTransfer.setData("application/x-xtwin-part", p.type);
+                  e.dataTransfer.setData("application/x-tconnect-part", p.type);
                   e.dataTransfer.effectAllowed = "copy";
                 }}
                 onDoubleClick={() => addCenter(p.type)}

@@ -145,7 +145,7 @@ export interface HistorianRun {
 
 function db(): Promise<IDBDatabase> {
   return new Promise((res, rej) => {
-    const r = indexedDB.open("xtwin-historian", 1);
+    const r = indexedDB.open("thosaphol-connect-historian", 1);
     r.onupgradeneeded = () => r.result.createObjectStore("runs", { keyPath: "id" });
     r.onsuccess = () => res(r.result);
     r.onerror = () => rej(r.error);

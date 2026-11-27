@@ -21,8 +21,8 @@ export function AIChat() {
   }, [msgs]);
   useEffect(() => {
     const onAsk = (e: Event) => void send((e as CustomEvent<string>).detail);
-    window.addEventListener("xtwin:ask", onAsk);
-    return () => window.removeEventListener("xtwin:ask", onAsk);
+    window.addEventListener("tconnect:ask", onAsk);
+    return () => window.removeEventListener("tconnect:ask", onAsk);
   });
 
   const send = async (raw?: string) => {

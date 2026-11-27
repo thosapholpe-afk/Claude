@@ -265,7 +265,7 @@ function Part3D({ inst }: { inst: PartInstance }) {
       body = (
         <mesh position={[0, 0.48, -0.1]} castShadow>
           <cylinderGeometry args={[0.6, 0.6, 0.95, 32]} />
-          <meshStandardMaterial color="#141518" emissive={lv?.on ? "#3dffa8" : "#000"} emissiveIntensity={lv?.on ? 0.15 : 0} />
+          <meshStandardMaterial color="#141518" emissive={lv?.on ? "#ced9e5" : "#000"} emissiveIntensity={lv?.on ? 0.15 : 0} />
         </mesh>
       );
       break;
@@ -280,7 +280,7 @@ function Part3D({ inst }: { inst: PartInstance }) {
             {[0, 1, 2].map((k) => (
               <mesh key={k} rotation={[0.3, (k * Math.PI * 2) / 3, 0]} position={[Math.cos((k * Math.PI * 2) / 3) * 0.7, 0, -Math.sin((k * Math.PI * 2) / 3) * 0.7]}>
                 <boxGeometry args={[1.2, 0.04, 0.45]} />
-                <meshStandardMaterial color="#3dffa8" transparent opacity={0.8} />
+                <meshStandardMaterial color="#ced9e5" transparent opacity={0.8} />
               </mesh>
             ))}
           </group>
@@ -639,7 +639,7 @@ function Atmosphere() {
   useFrame(() => {
     const env = live()?.env;
     const theme = document.documentElement.dataset.theme === "light";
-    let bg = theme ? "#dfe7ea" : "#07100c";
+    let bg = theme ? "#e4e9ee" : "#101820";
     let fogC = bg;
     let density = 0.012;
     if (scenario === "building-fire") {
@@ -692,7 +692,7 @@ function Lights() {
   return (
     <>
       <ambientLight ref={amb} intensity={0.45} />
-      <hemisphereLight args={["#e4fff1", "#1c2a22", 0.8]} />
+      <hemisphereLight args={["#eef3f8", "#242c37", 0.8]} />
       <directionalLight ref={sun} position={[8, 14, 6]} intensity={2.2} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-20} shadow-camera-right={20} shadow-camera-top={20} shadow-camera-bottom={-20} />
     </>
   );
@@ -733,7 +733,7 @@ export function Twin3D() {
         {scenario.id === "motor-vibration" ? (
           <Motor span={span} />
         ) : (
-          <Room span={span} wall={scenario.id === "building-fire" ? "#2a1a14" : scenario.id === "cold-storage" ? "#d6e6ef" : scenario.id === "day-night" || scenario.id === "greenhouse" ? "#000000" : "#16211b"} floor={scenario.id === "building-fire" ? "#241a16" : scenario.id === "cold-storage" ? "#e8f1f6" : scenario.id === "greenhouse" ? "#5a3b22" : "#1a2520"} />
+          <Room span={span} wall={scenario.id === "building-fire" ? "#2a1a14" : scenario.id === "cold-storage" ? "#d6e6ef" : scenario.id === "day-night" || scenario.id === "greenhouse" ? "#000000" : "#242a33"} floor={scenario.id === "building-fire" ? "#241a16" : scenario.id === "cold-storage" ? "#e8f1f6" : scenario.id === "greenhouse" ? "#5a3b22" : "#1b2129"} />
         )}
         {scenario.id === "building-fire" && <Fire span={span} />}
         {scenario.id === "flood" && <Water span={span} />}

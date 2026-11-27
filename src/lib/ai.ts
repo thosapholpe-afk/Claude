@@ -108,7 +108,7 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         const t = TEMPLATES.find((x) => x.id === input.template);
         if (!t) throw new Error("unknown template");
         const log = st.loadTemplate(t.id);
-        window.dispatchEvent(new Event("xtwin:fit"));
+        window.dispatchEvent(new Event("tconnect:fit"));
         return { result: { ok: true, notes: log, circuit: circuitSummary() }, summary: `Loaded template: ${t.name}`, ok: true };
       }
       case "add_part": {
@@ -215,7 +215,7 @@ export async function executeTool(name: string, input: Record<string, unknown>):
       }
       case "show_plot":
         useStudio.setState({ dockTab: "plot", dockOpen: true });
-        if (input.spectrum) window.dispatchEvent(new Event("xtwin:spectrum"));
+        if (input.spectrum) window.dispatchEvent(new Event("tconnect:spectrum"));
         return { result: { ok: true }, summary: "Opened the plotter", ok: true };
       case "mqtt_configure": {
         const m = { ...st.mqtt };
@@ -223,7 +223,7 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         if (input.topic_prefix) m.prefix = String(input.topic_prefix);
         if (input.interval_ms) m.intervalMs = Number(input.interval_ms);
         useStudio.setState({ mqtt: m, leftTab: "mqtt" });
-        if (input.connect) window.dispatchEvent(new Event("xtwin:mqtt-connect"));
+        if (input.connect) window.dispatchEvent(new Event("tconnect:mqtt-connect"));
         return { result: { ok: true, topics: { telemetry: `${m.prefix}/telemetry`, commands: `${m.prefix}/cmd/#` } }, summary: `MQTT → ${m.url} (${m.prefix}/…)`, ok: true };
       }
       case "create_custom_sensor": {

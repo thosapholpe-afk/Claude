@@ -822,7 +822,7 @@ void setup() {
   Serial.println(" Wi-Fi connected");
   mqtt.setServer(BROKER, 1883);
   mqtt.setCallback(onMessage);
-  while (!mqtt.connect("xtwin-esp32")) delay(500);
+  while (!mqtt.connect("tconnect-esp32")) delay(500);
   mqtt.subscribe("thosaphol/demo/led");
   Serial.println("MQTT connected");
 }
@@ -855,7 +855,7 @@ def on_msg(topic, msg):
     print("cmd", msg)
     led.value(1 if msg == "on" else 0)
 
-c = MQTTClient("xtwin-esp32", "broker.hivemq.com")
+c = MQTTClient("tconnect-esp32", "broker.hivemq.com")
 c.set_callback(on_msg)
 c.connect()
 c.subscribe("thosaphol/demo/led")

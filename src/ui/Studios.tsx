@@ -29,7 +29,7 @@ export function TemplatesPanel() {
               className="tpl card-pick"
               onClick={() => {
                 const log = load(t.id);
-                window.dispatchEvent(new Event("xtwin:fit"));
+                window.dispatchEvent(new Event("tconnect:fit"));
                 toast(log.length ? log.join(" · ") : `Loaded “${t.name}” — press Start Simulation`, log.length ? "warn" : "ok");
               }}
             >
@@ -124,8 +124,8 @@ export function MqttPanel() {
   const set = (patch: Partial<typeof cfg>) => useStudio.setState({ mqtt: { ...useStudio.getState().mqtt, ...patch } });
   useEffect(() => {
     const onC = () => connectMqtt();
-    window.addEventListener("xtwin:mqtt-connect", onC);
-    return () => window.removeEventListener("xtwin:mqtt-connect", onC);
+    window.addEventListener("tconnect:mqtt-connect", onC);
+    return () => window.removeEventListener("tconnect:mqtt-connect", onC);
   }, []);
   const on = status === "online";
   return (
@@ -186,7 +186,7 @@ export function MqttPanel() {
             <PlugZap size={15} /> Connect
           </button>
         )}
-        <button className="btn" onClick={() => download("xtwin-twin.json", JSON.stringify(twinConfig(), null, 2), "application/json")}>
+        <button className="btn" onClick={() => download("thosaphol-connect-twin.json", JSON.stringify(twinConfig(), null, 2), "application/json")}>
           <FileJson size={15} /> Export twin config
         </button>
       </div>
