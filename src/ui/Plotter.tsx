@@ -295,11 +295,11 @@ export function Plotter() {
       toast("Run the simulation first — there is nothing recorded yet", "warn");
       return;
     }
-    const name = prompt("Name this run for the historian", `${project.name} · ${new Date().toLocaleString()}`);
-    if (!name) return;
+    // no prompt(): it is unavailable in embedded viewers — name the run after the project and time
+    const name = `${project.name} · ${new Date().toLocaleString()}`;
     await saveRun({ id: `run-${Date.now()}`, name, createdAt: Date.now(), boardId: project.boardId, scenario: project.scenario.id, series: series.map((s) => ({ ...s, t: [...s.t], v: [...s.v] })) });
     setRuns(await listRuns());
-    toast("Saved to the historian", "ok");
+    toast(`Saved to the historian as “${name}”`, "ok");
   };
 
   return (
