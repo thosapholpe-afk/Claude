@@ -11,7 +11,12 @@
     "build": "tsc --noEmit -p . && vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit -p .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "form:setup": "tsx server/form-setup.ts setup",
+    "form:test": "tsx server/form-setup.ts test"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.14.0",

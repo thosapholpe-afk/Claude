@@ -15,11 +15,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { AGENT_MODEL, AGENT_SYSTEM, AGENT_TOOLS } from "../src/core/agentTools";
 import { BOARDS } from "../src/core/boards";
+import { formReady, recordToForm } from "./form";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8787);
-const PUBLIC_URL = (process.env.PUBLIC_URL ?? "http://localhost:5173").replace(/\/$/, "");
 const PROD = process.env.NODE_ENV === "production";
+/** Where browsers reach the app. Hosts that publish their own URL are picked up automatically. */
+const PUBLIC_URL = (
+  process.env.PUBLIC_URL ||
+  process.env.RENDER_EXTERNAL_URL ||
+  (process.env.RAILWAY_PUBLIC_DOMAIN && `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`) ||
+  (process.env.FLY_APP_NAME && `https://${process.env.FLY_APP_NAME}.fly.dev`) ||
+  (PROD ? `http://localhost:${PORT}` : "http://localhost:5173")
+).replace(/\/$/, "");
 const SECRET = process.env.SESSION_SECRET ?? crypto.randomBytes(32).toString("hex");
 if (!process.env.SESSION_SECRET) console.warn("[thosaphol-connect] SESSION_SECRET is not set — sessions reset when the server restarts.");
 
@@ -39,7 +47,7 @@ interface StoredUser {
   lastLogin: string;
   logins: number;
 }
-const DATA_DIR = path.join(here, "data");
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(here, "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 let users: Record<string, StoredUser> = {};
@@ -48,7 +56,13 @@ try {
 } catch {
   users = {};
 }
-const saveUsers = () => fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+const saveUsers = () => {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  } catch (e) {
+    console.warn("[thosaphol-connect] could not save users:", (e as Error).message);
+  }
+};
 const publicUser = (u: StoredUser) => ({ id: u.id, name: u.name, email: u.email, avatar: u.avatar, provider: u.provider, needsProfile: u.needsProfile, role: u.role, organization: u.organization });
 
 // ------------------------------------------------------------------ sessions
@@ -72,47 +86,23 @@ function verify<T>(token: string | undefined): T | null {
     return null;
   }
 }
-const cookieOpts = { httpOnly: true, sameSite: "lax" as const, secure: PROD, path: "/" };
-function currentUser(req: Request): StoredUser | null {
-  const s = verify<{ uid: string }>(req.cookies?.tc_session);
-  return s ? users[s.uid] ?? null : null;
+const cookieOpts = { httpOnly: true, sameSite: "lax" as const, secure: PROD && PUBLIC_URL.startsWith("https://"), path: "/" };
+const SESSION_DAYS = 30;
+type Snapshot = Pick<StoredUser, "provider" | "providerId" | "name" | "email" | "avatar" | "role" | "organization" | "needsProfile" | "createdAt">;
+/** The session cookie carries a signed copy of the profile, so a wiped user file (free hosting tiers) doesn't log people out or re-ask their name. */
+function issueSession(res: Response, u: StoredUser) {
+  const snap: Snapshot = { provider: u.provider, providerId: u.providerId, name: u.name, email: u.email, avatar: u.avatar, role: u.role, organization: u.organization, needsProfile: u.needsProfile, createdAt: u.createdAt };
+  res.cookie("tc_session", sign({ uid: u.id, u: snap, exp: Date.now() + SESSION_DAYS * 86_400_000 }), { ...cookieOpts, maxAge: SESSION_DAYS * 86_400_000 });
 }
-
-// ------------------------------------------------------------------ Google Form logging
-const FORM = {
-  id: process.env.GFORM_ID,
-  name: process.env.GFORM_ENTRY_NAME,
-  email: process.env.GFORM_ENTRY_EMAIL,
-  provider: process.env.GFORM_ENTRY_PROVIDER,
-  role: process.env.GFORM_ENTRY_ROLE,
-  org: process.env.GFORM_ENTRY_ORG,
-  event: process.env.GFORM_ENTRY_EVENT,
-  time: process.env.GFORM_ENTRY_TIME,
-};
-async function recordToForm(fields: { name: string; email?: string; provider: string; role?: string; org?: string; event: string }) {
-  if (!FORM.id || !FORM.name) return false;
-  const body = new URLSearchParams();
-  const put = (entry: string | undefined, v: string | undefined) => entry && v !== undefined && body.append(`entry.${entry.replace(/^entry\./, "")}`, v);
-  put(FORM.name, fields.name);
-  put(FORM.email, fields.email ?? "");
-  put(FORM.provider, fields.provider);
-  put(FORM.role, fields.role ?? "");
-  put(FORM.org, fields.org ?? "");
-  put(FORM.event, fields.event);
-  put(FORM.time, new Date().toISOString());
-  try {
-    const r = await fetch(`https://docs.google.com/forms/d/e/${FORM.id}/formResponse`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-      redirect: "manual",
-    });
-    if (r.status >= 400) console.warn(`[thosaphol-connect] Google Form responded ${r.status} — check GFORM_ID and entry IDs`);
-    return r.status < 400;
-  } catch (e) {
-    console.warn("[thosaphol-connect] Google Form submit failed:", (e as Error).message);
-    return false;
+function currentUser(req: Request): StoredUser | null {
+  const s = verify<{ uid: string; u?: Snapshot }>(req.cookies?.tc_session);
+  if (!s) return null;
+  if (!users[s.uid] && s.u) {
+    const now = new Date().toISOString();
+    users[s.uid] = { id: s.uid, ...s.u, createdAt: s.u.createdAt ?? now, lastLogin: now, logins: 1 };
+    saveUsers();
   }
+  return users[s.uid] ?? null;
 }
 
 // ------------------------------------------------------------------ OAuth providers
@@ -247,7 +237,7 @@ app.get("/auth/:provider/callback", async (req, res) => {
     if (existing && !existing.needsProfile && process.env.GFORM_LOG_LOGINS === "true") {
       void recordToForm({ name: existing.name, email: existing.email, provider: p.id, role: existing.role, org: existing.organization, event: "login" });
     }
-    res.cookie("tc_session", sign({ uid: id, exp: Date.now() + 30 * 86_400_000 }), { ...cookieOpts, maxAge: 30 * 86_400_000 });
+    issueSession(res, users[id]);
     res.redirect(`${PUBLIC_URL}/?login=ok`);
   } catch (e) {
     console.error("[thosaphol-connect] OAuth error:", (e as Error).message);
@@ -260,13 +250,23 @@ app.post("/auth/logout", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/api/health", (_req, res) => {
+  res.json({
+    ok: true,
+    publicUrl: PUBLIC_URL,
+    providers: Object.values(PROVIDERS).filter(enabled).map((p) => p.id),
+    googleForm: formReady(),
+    copilot: !!anthropic,
+  });
+});
+
 app.get("/api/me", (req, res) => {
   const u = currentUser(req);
   res.json({
     user: u ? publicUser(u) : null,
     providers: Object.fromEntries(Object.values(PROVIDERS).map((p) => [p.id, enabled(p)])),
     guest: process.env.ALLOW_GUEST !== "false",
-    formConfigured: !!(FORM.id && FORM.name),
+    formConfigured: formReady(),
   });
 });
 
@@ -287,6 +287,7 @@ app.post("/api/profile", async (req, res) => {
   u.organization = String(req.body?.organization ?? "").slice(0, 80) || undefined;
   u.needsProfile = false;
   saveUsers();
+  issueSession(res, u);
   void recordToForm({ name, email: u.email, provider: u.provider, role: u.role, org: u.organization, event: first ? "signup" : "profile-update" });
   res.json({ user: publicUser(u) });
 });
@@ -428,5 +429,8 @@ app.listen(PORT, () => {
   console.log(`[thosaphol-connect] API on http://localhost:${PORT} · public URL ${PUBLIC_URL}`);
   console.log(`[thosaphol-connect] sign-in providers: ${on.length ? on.join(", ") : "none configured (guest/local mode only)"}`);
   console.log(`[thosaphol-connect] copilot: ${anthropic ? `Claude (${AGENT_MODEL})` : "offline assistant (no ANTHROPIC_API_KEY)"}`);
-  console.log(`[thosaphol-connect] Google Form logging: ${FORM.id && FORM.name ? "on" : "off"}`);
+  console.log(`[thosaphol-connect] Google Form logging: ${formReady() ? "on" : "off (run: npm run form:setup -- <form link>)"}`);
+  console.log(`[thosaphol-connect] user data: ${USERS_FILE}`);
+  console.log(`[thosaphol-connect] redirect URIs to register with each sign-in provider:`);
+  for (const p of Object.values(PROVIDERS)) console.log(`    ${p.id.padEnd(9)} ${redirectUri(p.id)}${enabled(p) ? "" : "   (not configured)"}`);
 });

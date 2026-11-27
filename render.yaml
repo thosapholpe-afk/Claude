@@ -1,0 +1,60 @@
+# Render Blueprint — Dashboard → New → Blueprint → pick this repo and branch.
+# Render asks for every value marked `sync: false`; leave any provider blank to keep it off.
+services:
+  - type: web
+    name: thosaphol-connect
+    runtime: node
+    plan: free
+    region: singapore
+    branch: claude/optimistic-allen-1tuwsi
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # PUBLIC_URL is picked up from Render automatically; set it only for a custom domain.
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ALLOW_GUEST
+        value: "true"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: INSTAGRAM_APP_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: GFORM_ID
+        sync: false
+      - key: GFORM_ENTRY_NAME
+        sync: false
+      - key: GFORM_ENTRY_EMAIL
+        sync: false
+      - key: GFORM_ENTRY_PROVIDER
+        sync: false
+      - key: GFORM_ENTRY_ROLE
+        sync: false
+      - key: GFORM_ENTRY_ORG
+        sync: false
+      - key: GFORM_ENTRY_EVENT
+        sync: false
+      - key: GFORM_ENTRY_TIME
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    # On a paid plan, keep the user list across deploys with a disk:
+    # disk:
+    #   name: data
+    #   mountPath: /var/data
+    # and add  - key: DATA_DIR / value: /var/data  above.

@@ -38,6 +38,8 @@ npm run dev               # web on http://localhost:5173, API on :8787
 
 - `npm test` — solver, runtime and all 63 template × board × language combinations
 - `npm run build && npm start` — production build served by the API server on `PORT`
+- **Put it online with sign-in + Google Form logging:** step-by-step in [DEPLOY.md](DEPLOY.md) (Render Blueprint `render.yaml`, or the `Dockerfile` for Railway / Fly.io / your own server)
+- `npm run form:setup -- <form link>` prints the `GFORM_*` settings for your Google Form; `npm run form:test` sends a test row
 
 ## Configure
 
