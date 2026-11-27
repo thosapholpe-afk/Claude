@@ -135,4 +135,31 @@ print("hpa:{:.1f},probe:{}".format(pa / 100, ds.read_temp(roms[0])))
     expect(dry.I.indicator).toBe(false);
     expect(dry.H.indicator).toBe(false);
   });
+
+  it("multimeter reads volts, milliamps and ohms", () => {
+    const e = new SimEngine();
+    e.autoFrames = false;
+    // 5 V across a 1 kΩ resistor, meter in parallel (volts)
+    e.setCircuit("arduino-uno", [board("arduino-uno"), part("R", "resistor", { ohms: 1000 }), part("DMM", "multimeter")], [
+      wire("1", "board.5v", "R.1"),
+      wire("2", "R.2", "board.gnd1"),
+      wire("3", "DMM.VO", "R.1"),
+      wire("4", "DMM.COM", "R.2"),
+    ]);
+    expect(Number(e.snapshot()!.live.DMM.reading)).toBeCloseTo(5, 1);
+    // meter in series as an ammeter: 5 V / 1 kΩ = 5 mA
+    e.setInput("DMM", { mode: 1 });
+    e.setCircuit("arduino-uno", [board("arduino-uno"), part("R", "resistor", { ohms: 1000 }), part("DMM", "multimeter")], [
+      wire("1", "board.5v", "DMM.VO"),
+      wire("2", "DMM.COM", "R.1"),
+      wire("3", "R.2", "board.gnd1"),
+    ]);
+    expect(Number(e.snapshot()!.live.DMM.reading)).toBeCloseTo(5, 0);
+    expect(e.snapshot()!.live.DMM.readingUnit).toBe("mA");
+    // ohmmeter on a lone 4.7 kΩ resistor
+    e.setInput("DMM", { mode: 2 });
+    e.setCircuit("arduino-uno", [board("arduino-uno"), part("R", "resistor", { ohms: 4700 }), part("DMM", "multimeter")], [wire("1", "DMM.VO", "R.1"), wire("2", "DMM.COM", "R.2")]);
+    expect(Number(e.snapshot()!.live.DMM.reading)).toBeGreaterThan(4600);
+    expect(Number(e.snapshot()!.live.DMM.reading)).toBeLessThan(4800);
+  });
 });

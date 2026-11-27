@@ -44,9 +44,15 @@ function BoardLive({ board, inst, lift }: { board: BoardDef; inst: PartInstance;
     const id = builtinLedId(board);
     return !!id && builtinLedLit(board, s.snap?.drives[id]);
   });
+  const ioKey = useStudio((s) => (board.family === "plc" ? board.pins.filter((p) => /^[XY]\d$/.test(p.label)).map((p) => ((s.snap?.pinV[p.id] ?? 0) > 12 ? "1" : "0")).join("") : ""));
+  const io = useMemo(() => {
+    const o: Record<string, boolean> = {};
+    board.pins.filter((p) => /^[XY]\d$/.test(p.label)).forEach((p, i) => (o[p.label] = ioKey[i] === "1"));
+    return o;
+  }, [ioKey, board]);
   return (
     <Placed inst={inst} w={board.width} h={board.height} lift={lift}>
-      <BoardModel board={board} powered={running} ledOn={ledOn} />
+      <BoardModel board={board} powered={running} ledOn={ledOn} io={io} />
     </Placed>
   );
 }

@@ -86,7 +86,7 @@ interface State {
   future: Project[];
   selection: string[];
   selectedWire: string | null;
-  view: "2d" | "3d";
+  view: "2d" | "diagram" | "3d";
   leftTab: LeftTab | null;
   dockTab: DockTab;
   dockOpen: boolean;
@@ -375,6 +375,8 @@ export const useStudio = create<State>((set, get) => ({
     void get().stopSim();
     get().commit((p) => ({ ...p, boardId, name: t.name, parts: inst.parts, wires: inst.wires, lang: inst.lang, code: inst.code, scenario: inst.scenario, envOverrides: {} }));
     set({ selection: [], selectedWire: null, dockTab: "code", dockOpen: true });
+    // control-panel templates have many wires: route them orthogonally right away
+    if (getBoard(boardId).family === "plc") get().tidyWires();
     return inst.log;
   },
   select: (ids, wire = null) => set((s) => ({ selection: ids, selectedWire: wire, selKey: s.selKey + 1 })),

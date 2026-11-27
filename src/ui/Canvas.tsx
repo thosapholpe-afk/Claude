@@ -7,6 +7,7 @@ import type { BoardDef, PartInstance, Wire } from "../core/types";
 import { snap } from "../core/wiring";
 import { useStudio } from "../store";
 import { Board2D, SvgDefs } from "./render/Board2D";
+import { DiagramBoard, DiagramPart } from "./render/Diagram2D";
 import { Part2D } from "./render/Parts2D";
 
 /** Which PLC terminals are energised (above half the 24 V logic level). */
@@ -59,6 +60,7 @@ function wirePath(a: { x: number; y: number }, b: { x: number; y: number }, pts:
 }
 
 export function Canvas() {
+  const diagram = useStudio((s) => s.view === "diagram");
   const project = useStudio((s) => s.project);
   const snapState = useStudio((s) => s.snap);
   const selection = useStudio((s) => s.selection);
@@ -339,9 +341,26 @@ export function Canvas() {
       >
         <path d={d} stroke="transparent" strokeWidth={3} fill="none" />
         {sel && <path d={d} stroke="var(--accent)" strokeWidth={2.4} fill="none" opacity={0.45} />}
-        <path d={d} stroke="rgba(0,0,0,.55)" strokeWidth={1.25} fill="none" strokeLinecap="round" />
-        <path d={d} stroke={w.color} strokeWidth={0.85} fill="none" strokeLinecap="round" />
-        <path d={d} stroke="#fff" strokeWidth={0.22} fill="none" opacity={0.28} strokeLinecap="round" transform="translate(-0.18 -0.18)" />
+        {diagram ? (
+          <path d={d} stroke={live ? "var(--dg-live)" : w.color} strokeWidth={0.45} fill="none" strokeLinejoin="round" />
+        ) : (
+          <>
+            <path d={d} stroke="rgba(0,0,0,.55)" strokeWidth={1.25} fill="none" strokeLinecap="round" />
+            <path d={d} stroke={w.color} strokeWidth={0.85} fill="none" strokeLinecap="round" />
+            <path d={d} stroke="#fff" strokeWidth={0.22} fill="none" opacity={0.28} strokeLinecap="round" transform="translate(-0.18 -0.18)" />
+          </>
+        )}
+        {diagram && running && (() => {
+          const mid = w.points.length ? w.points[Math.floor(w.points.length / 2)] : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          return (
+            <g transform={`translate(${mid.x} ${mid.y})`}>
+              <rect x={-4.2} y={-1.35} width={8.4} height={2.7} rx={1.35} fill="var(--dg-tag)" />
+              <text y={0.65} fontSize={1.75} textAnchor="middle" fill={live ? "var(--dg-live)" : "var(--dg-sub)"} fontFamily="IBM Plex Mono, monospace">
+                {Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(1)} V
+              </text>
+            </g>
+          );
+        })()}
         {live && <path d={d} className="flow" stroke={v > 4 ? "#f5b0a3" : "#e8d4a2"} strokeWidth={0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
         <circle cx={a.x} cy={a.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
         <circle cx={b.x} cy={b.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
@@ -376,7 +395,7 @@ export function Canvas() {
   }, [hp, project.parts, board, snapState, running, inserted]);
 
   return (
-    <div className="canvas-wrap" ref={wrapRef} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+    <div className={`canvas-wrap ${diagram ? "diagram" : ""}`} ref={wrapRef} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       <svg
         ref={svgRef}
         className={`canvas ${pending ? "is-wiring" : ""} ${drag?.kind === "pan" ? "is-panning" : ""}`}
@@ -410,7 +429,9 @@ export function Canvas() {
             return (
               <g key={inst.id} data-id={inst.id} className={`part ${sel ? "is-selected" : ""}`} onPointerDown={(e) => onPointerDownPart(e, inst)}>
                 <g transform={`translate(${inst.x} ${inst.y}) rotate(${inst.rot} ${cx} ${cy})`}>
-                  {isBoard(inst) ? (
+                  {diagram ? (
+                    isBoard(inst) ? <DiagramBoard board={board} pinV={snapState?.pinV} running={running} /> : def ? <DiagramPart inst={inst} def={def} fp={fp} live={live} /> : null
+                  ) : isBoard(inst) ? (
                     <Board2D board={board} powered={running} ledOn={ledOn} io={board.family === "plc" ? plcIo(board, snapState?.pinV) : undefined} />
                   ) : def ? (
                     <Part2D inst={inst} def={def} live={live} t={ANIMATED.has(def.type) || live?.burnt ? t : 0} />

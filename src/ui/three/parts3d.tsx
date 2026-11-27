@@ -1296,6 +1296,221 @@ function RainModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// panel devices (industrial control) and the multimeter
+// ---------------------------------------------------------------------------
+const DEVICE: Record<string, { h: number; color: string }> = {
+  "pb-no": { h: 12, color: "#24262a" },
+  "pb-nc": { h: 12, color: "#24262a" },
+  "pilot-lamp": { h: 12, color: "#24262a" },
+  estop: { h: 14, color: "#f2c419" },
+  selector2: { h: 12, color: "#24262a" },
+  selector3: { h: 12, color: "#24262a" },
+  "limit-switch": { h: 22, color: "#c6ccd2" },
+  contactor: { h: 70, color: "#e6e5e1" },
+  overload: { h: 40, color: "#e6e5e1" },
+  "timer-relay": { h: 62, color: "#e6e5e1" },
+  psu24: { h: 50, color: "#c9ced3" },
+  supply3: { h: 24, color: "#2a2c30" },
+  mcb3: { h: 44, color: "#f2f1ec" },
+  multimeter: { h: 26, color: "#f2c419" },
+};
+const CAP_COLOR: Record<string, string> = { green: "#22b35a", red: "#e0352d", black: "#222", yellow: "#f2c419", blue: "#2c6fe0", white: "#f1f1ee", amber: "#ff9d1c" };
+
+function ScrewTerminals({ pins, y }: { pins: { x: number; y: number }[]; y: number }) {
+  const heads = useMemo(() => pins.map((p) => ({ x: p.x, y: y + 0.4, z: p.y })), [pins, y]);
+  return <Boxes items={heads} size={SCREW} material={METAL} />;
+}
+const SCREW: [number, number, number] = [2.6, 0.8, 2.6];
+
+function DeviceModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
+  const L = useLive(inst.id);
+  const spec = DEVICE[def.type] ?? { h: 20, color: "#e6e5e1" };
+  const H = spec.h;
+  const tex = useArt(inst, def, { x: 0, y: 0, w: def.w, h: def.h });
+  const cap = useRef<THREE.Group>(null);
+  const knob = useRef<THREE.Group>(null);
+  const pressed = !!L?.on;
+  useFrame((_, dt) => {
+    if (cap.current) cap.current.position.y = THREE.MathUtils.damp(cap.current.position.y, H + (pressed ? 1.2 : 4), 25, dt);
+    if (knob.current) {
+      const pos = Number(L?.reading ?? 0);
+      const ang = def.type === "selector3" ? (pos === 1 ? 45 : pos === 2 ? -45 : 0) : pos ? -45 : 45;
+      knob.current.rotation.y = THREE.MathUtils.damp(knob.current.rotation.y, THREE.MathUtils.degToRad(ang), 12, dt);
+    }
+  });
+  const bodyH = def.type === "supply3" ? 16 : H;
+  const bodyD = def.type === "pb-no" || def.type === "pb-nc" || def.type === "pilot-lamp" ? 21 : def.type.startsWith("selector") ? 25 : def.type === "estop" ? 26 : def.type === "supply3" ? 15 : def.h;
+  const lampColor = CAP_COLOR[String(inst.props.color ?? "green")] ?? "#22b35a";
+  const b = Math.min(1.2, L?.brightness ?? 0);
+  const lcd = useMemo(() => {
+    if (def.type !== "multimeter") return null;
+    const c = document.createElement("canvas");
+    c.width = 512;
+    c.height = 280;
+    return { c, t: new THREE.CanvasTexture(c) };
+  }, [def.type]);
+  const text = L?.text ?? ["0.000", "V DC"];
+  useMemo(() => {
+    if (!lcd) return;
+    const g = lcd.c.getContext("2d")!;
+    g.fillStyle = "#b8c9a5";
+    g.fillRect(0, 0, 512, 280);
+    g.fillStyle = "#1d2a14";
+    g.font = "600 44px IBM Plex Mono, monospace";
+    g.fillText(text[1] ?? "", 24, 60);
+    g.font = "600 150px IBM Plex Mono, monospace";
+    g.textAlign = "right";
+    g.fillText(text[0] ?? "", 490, 230);
+    g.textAlign = "left";
+    lcd.t.colorSpace = THREE.SRGBColorSpace;
+    lcd.t.needsUpdate = true;
+  }, [lcd, text[0], text[1]]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <group>
+      <RoundedBox args={[def.w, bodyH, bodyD]} radius={Math.min(1.6, bodyH / 3)} smoothness={3} position={[def.w / 2, bodyH / 2, bodyD / 2]} castShadow receiveShadow>
+        <meshStandardMaterial color={spec.color} roughness={def.type === "psu24" ? 0.35 : 0.6} metalness={def.type === "psu24" || def.type === "limit-switch" ? 0.6 : 0.05} />
+      </RoundedBox>
+      {tex && (
+        <mesh position={[def.w / 2, bodyH + 0.03, def.h / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[def.w, def.h]} />
+          <meshStandardMaterial map={tex} transparent alphaTest={0.4} roughness={0.55} />
+        </mesh>
+      )}
+      <ScrewTerminals pins={def.pins} y={bodyH} />
+      {(def.type === "pb-no" || def.type === "pb-nc") && (
+        <group ref={cap} position={[11.43, H + 4, 10.5]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[7.4, 7.8, 5, 40]} />
+            <meshStandardMaterial color={CAP_COLOR[String(inst.props.color ?? (def.type === "pb-nc" ? "red" : "green"))] ?? "#22b35a"} roughness={0.35} />
+          </mesh>
+          <mesh position={[0, -2.6, 0]}>
+            <cylinderGeometry args={[9.4, 9.4, 1.6, 40]} />
+            <meshStandardMaterial {...METAL} />
+          </mesh>
+        </group>
+      )}
+      {def.type === "pilot-lamp" && (
+        <group position={[11.43, H, 10.5]}>
+          <mesh position={[0, 0.8, 0]}>
+            <cylinderGeometry args={[9.4, 9.4, 1.6, 40]} />
+            <meshStandardMaterial {...METAL} />
+          </mesh>
+          <mesh position={[0, 3, 0]} castShadow>
+            <sphereGeometry args={[7.6, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2.4]} />
+            <meshPhysicalMaterial color={lampColor} roughness={0.25} transmission={0.3} thickness={2} transparent opacity={0.95} emissive={lampColor} emissiveIntensity={b * 4} toneMapped={b < 0.05} />
+          </mesh>
+          {b > 0.05 && <pointLight color={lampColor} intensity={b * 1.2} distance={90} decay={2} position={[0, 10, 0]} />}
+        </group>
+      )}
+      {def.type === "estop" && (
+        <group position={[13.97, H, 13.6]}>
+          <mesh position={[0, 3, 0]}>
+            <cylinderGeometry args={[5, 6, 6, 32]} />
+            <meshStandardMaterial color="#2a2c30" />
+          </mesh>
+          <mesh position={[0, pressed ? 6.5 : 9, 0]} castShadow>
+            <sphereGeometry args={[11, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2.8]} />
+            <meshStandardMaterial color={pressed ? "#a9201a" : "#e0352d"} roughness={0.35} />
+          </mesh>
+        </group>
+      )}
+      {def.type.startsWith("selector") && (
+        <group ref={knob} position={[11.43, H, 13]}>
+          <mesh position={[0, 1, 0]}>
+            <cylinderGeometry args={[6.8, 6.8, 2, 32]} />
+            <meshStandardMaterial {...METAL} />
+          </mesh>
+          <mesh position={[0, 4.5, 0]} castShadow>
+            <boxGeometry args={[3, 6, 11]} />
+            <meshStandardMaterial color="#2e3035" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 7.55, -4.2]}>
+            <boxGeometry args={[1, 0.1, 2]} />
+            <meshStandardMaterial color="#f2f2f0" />
+          </mesh>
+        </group>
+      )}
+      {def.type === "limit-switch" && (
+        <group position={[15, H, 12]} rotation={[0, 0, pressed ? 0.5 : 0]}>
+          <mesh position={[0, 5, 0]} castShadow>
+            <boxGeometry args={[2, 10, 2]} />
+            <meshStandardMaterial color="#2b2d31" />
+          </mesh>
+          <mesh position={[0, 10, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
+            <cylinderGeometry args={[2.6, 2.6, 3, 24]} />
+            <meshStandardMaterial color="#1b1c1f" />
+          </mesh>
+        </group>
+      )}
+      {lcd && (
+        <mesh position={[20.32, H + 0.08, 14]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[28.6, 16]} />
+          <meshStandardMaterial map={lcd.t} emissive="#c9ffb0" emissiveMap={lcd.t} emissiveIntensity={0.25} />
+        </mesh>
+      )}
+      {def.type === "contactor" && <SmdLed x={def.w / 2} z={33} y={H} color="#33ff88" on={pressed} light />}
+      {def.type === "timer-relay" && (
+        <>
+          <SmdLed x={def.w / 2 - 4} z={12} y={H} color="#33ff88" on={!!L?.indicator} />
+          <SmdLed x={def.w / 2 + 4} z={12} y={H} color="#ffb020" on={pressed} light />
+        </>
+      )}
+      {def.type === "psu24" && <SmdLed x={def.w - 6} z={6} y={H} color="#33ff88" on light />}
+      {def.type === "overload" && <SmdLed x={24.5} z={17} y={H} color="#ff3b30" on={pressed} light />}
+    </group>
+  );
+}
+
+function Motor3Model({ inst, def }: { inst: PartInstance; def: PartDef }) {
+  const L = useLive(inst.id);
+  const fan = useRef<THREE.Group>(null);
+  const sp = useRef(0);
+  useFrame((_, dt) => {
+    sp.current = THREE.MathUtils.damp(sp.current, L?.speed ?? 0, 2, dt);
+    if (fan.current) fan.current.rotation.y += sp.current * dt * 40;
+  });
+  const fins = useMemo(() => Array.from({ length: 24 }, (_, i) => (i / 24) * Math.PI * 2), []);
+  return (
+    <group>
+      <ScrewTerminals pins={def.pins} y={6} />
+      <mesh position={[25.4, 3, 47]} castShadow>
+        <boxGeometry args={[28.8, 6, 7]} />
+        <meshStandardMaterial color="#2a2c30" />
+      </mesh>
+      <group position={[25.4, 0, 22]}>
+        <mesh position={[0, 20, 0]} castShadow>
+          <cylinderGeometry args={[17, 17, 40, 48]} />
+          <meshStandardMaterial color="#4f6b8a" roughness={0.45} metalness={0.3} />
+        </mesh>
+        {fins.map((a) => (
+          <mesh key={a} position={[Math.cos(a) * 18, 20, Math.sin(a) * 18]} rotation={[0, -a, 0]} castShadow>
+            <boxGeometry args={[3, 38, 1.2]} />
+            <meshStandardMaterial color="#45607d" roughness={0.5} metalness={0.3} />
+          </mesh>
+        ))}
+        <mesh position={[0, 41, 0]}>
+          <cylinderGeometry args={[19.5, 19.5, 2, 48, 1, true]} />
+          <meshStandardMaterial color="#34495f" side={THREE.DoubleSide} />
+        </mesh>
+        <group ref={fan} position={[0, 41.5, 0]}>
+          {[0, 1, 2, 3, 4, 5].map((k) => (
+            <mesh key={k} rotation={[0.4, (k * Math.PI) / 3, 0]} position={[Math.cos((k * Math.PI) / 3) * 8, 0, -Math.sin((k * Math.PI) / 3) * 8]}>
+              <boxGeometry args={[14, 0.6, 5]} />
+              <meshStandardMaterial color="#c9d4e0" roughness={0.4} />
+            </mesh>
+          ))}
+          <mesh>
+            <cylinderGeometry args={[3, 3, 2, 20]} />
+            <meshStandardMaterial color="#2a2c30" />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  );
+}
+
 // ---------------------------------------------------------------------------
 export function PartModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
   switch (def.type) {
@@ -1342,7 +1557,10 @@ export function PartModel({ inst, def }: { inst: PartInstance; def: PartDef }) {
       return <PulseModel inst={inst} def={def} />;
     case "rain":
       return <RainModel inst={inst} def={def} />;
+    case "motor3":
+      return <Motor3Model inst={inst} def={def} />;
     default:
+      if (DEVICE[def.type]) return <DeviceModel inst={inst} def={def} />;
       return <ModuleModel inst={inst} def={def} />;
   }
 }

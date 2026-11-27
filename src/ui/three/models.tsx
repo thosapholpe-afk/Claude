@@ -400,8 +400,54 @@ function StatusLeds({ board, powered, ledOn }: { board: BoardDef; powered: boole
   );
 }
 
+export const PLC_H = 40;
+
+/** Compact PLC housing with its front-panel art, screw terminals and live I/O LEDs. */
+function PlcModel({ board, powered, io }: { board: BoardDef; powered: boolean; io: Record<string, boolean> }) {
+  const W = board.width;
+  const H = board.height;
+  const face = useSvgTexture(`plcface:${board.id}`, W, H, () => <Board2D board={board} powered={false} ledOn={false} io={{}} />);
+  const heads = useMemo(() => board.pins.map((p) => ({ x: p.x, y: PLC_H + 0.6, z: p.y })), [board]);
+  return (
+    <group>
+      <RoundedBox args={[W, PLC_H, H]} radius={2.2} smoothness={3} position={[W / 2, PLC_H / 2, H / 2]} castShadow receiveShadow>
+        <meshStandardMaterial color="#d9d7d1" roughness={0.6} />
+      </RoundedBox>
+      {face && (
+        <mesh position={[W / 2, PLC_H + 0.03, H / 2]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[W, H]} />
+          <meshStandardMaterial map={face} transparent alphaTest={0.3} roughness={0.55} />
+        </mesh>
+      )}
+      <Boxes items={heads} size={[4.4, 1.2, 4.4]} material={METAL} />
+      {Array.from({ length: 8 }, (_, i) => (
+        <group key={i}>
+          <IoLed x={22 + i * 7} z={45} on={!!io[`X${i}`]} color="#3bff7a" />
+          <IoLed x={22 + i * 7} z={55} on={!!io[`Y${i}`]} color="#ffb020" />
+        </group>
+      ))}
+      <IoLed x={82.6} z={45} on={powered} color="#3bff7a" />
+      <IoLed x={82.6} z={50} on={powered} color="#3bff7a" />
+    </group>
+  );
+}
+
+function IoLed({ x, z, on, color }: { x: number; z: number; on: boolean; color: string }) {
+  return (
+    <mesh position={[x, PLC_H + 0.25, z]}>
+      <boxGeometry args={[1.8, 0.4, 1.2]} />
+      <meshStandardMaterial color={on ? color : "#4a4d52"} emissive={color} emissiveIntensity={on ? 5 : 0} toneMapped={!on} />
+    </mesh>
+  );
+}
+
 /** Full board model in mm. Origin = PCB top-left corner, y = 0 at the PCB's underside. */
-export function BoardModel({ board, powered = false, ledOn = false }: { board: BoardDef; powered?: boolean; ledOn?: boolean }) {
+export function BoardModel({ board, powered = false, ledOn = false, io }: { board: BoardDef; powered?: boolean; ledOn?: boolean; io?: Record<string, boolean> }) {
+  if (board.family === "plc") return <PlcModel board={board} powered={powered} io={io ?? {}} />;
+  return <McuBoardModel board={board} powered={powered} ledOn={ledOn} />;
+}
+
+function McuBoardModel({ board, powered = false, ledOn = false }: { board: BoardDef; powered?: boolean; ledOn?: boolean }) {
   const t = board.thickness;
   const W = board.width;
   const H = board.height;
@@ -506,7 +552,8 @@ export function computeStack(parts: PartInstance[], inserted: { part: string; bb
   for (const p of parts) {
     if (isHost(p)) lift.set(p.id, p.id === boardHost && style === "male-up" ? board.thickness + SPACER + 0.4 : 0);
   }
-  if (boardInst) {
+  if (boardInst && board.family === "plc") lift.set(boardInst.id, 0);
+  else if (boardInst) {
     const host = boardHost ? parts.find((p) => p.id === boardHost) : undefined;
     if (host && style === "male-down") lift.set(boardInst.id, (lift.get(host.id) ?? 0) + (HOST_TOP[host.type] ?? 1.6) + SPACER);
     else if (style === "male-down") lift.set(boardInst.id, SPACER + PIN_BELOW);
@@ -524,7 +571,7 @@ export function computeStack(parts: PartInstance[], inserted: { part: string; bb
     if (!inst) return 5;
     const base = lift.get(partId) ?? 0;
     if (isHost(inst)) return base + (HOST_TOP[inst.type] ?? 1.6) + 0.3;
-    if (isBoard(inst)) return base + board.thickness + (style === "male-down" ? 1.3 : style === "female-up" ? 8.5 : SPACER + 6);
+    if (isBoard(inst)) return board.family === "plc" ? PLC_H + 1 : base + board.thickness + (style === "male-down" ? 1.3 : style === "female-up" ? 8.5 : SPACER + 6);
     return base + partPinTop(inst.type);
   };
   return { lift, pinTop, hostOf };

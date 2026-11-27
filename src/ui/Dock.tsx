@@ -14,6 +14,7 @@ import { templateFor } from "../core/templates";
 import { serialiseLadder, startStopProgram } from "../core/plc";
 import type { Lang } from "../core/types";
 import { useStudio, type DockTab } from "../store";
+import { LadderEditor } from "./Ladder";
 import { Plotter } from "./Plotter";
 
 const hl = HighlightStyle.define([
@@ -65,6 +66,12 @@ while True:
 };
 
 function CodePane() {
+  const lang = useStudio((s) => s.project.lang);
+  if (lang === "ladder") return <LadderEditor />;
+  return <TextCodePane />;
+}
+
+function TextCodePane() {
   const project = useStudio((s) => s.project);
   const setCode = useStudio((s) => s.setCode);
   const setLang = useStudio((s) => s.setLang);

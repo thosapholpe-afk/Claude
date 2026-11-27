@@ -13,6 +13,8 @@ import { Part2D } from "./render/Parts2D";
 
 const CATS: { id: PartCategory | "all"; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "control", label: "Control" },
+  { id: "instrument", label: "Meters" },
   { id: "sensor", label: "Sensors" },
   { id: "output", label: "Outputs" },
   { id: "actuator", label: "Motion" },
@@ -41,11 +43,15 @@ export function PartsPanel() {
   const custom = useStudio((s) => s.customSensors);
   const setBoard = useStudio((s) => s.setBoard);
   const set = useStudio((s) => s.set);
+  const plcMode = getBoard(project.boardId).family === "plc";
   const parts = useMemo(() => {
     void custom;
     const ql = q.trim().toLowerCase();
-    return allParts().filter((p) => (cat === "all" || p.category === cat) && (!ql || p.name.toLowerCase().includes(ql) || p.keywords.some((k) => k.includes(ql)) || p.description.toLowerCase().includes(ql)));
-  }, [q, cat, custom]);
+    const list = allParts().filter((p) => (cat === "all" || p.category === cat) && (!ql || p.name.toLowerCase().includes(ql) || p.keywords.some((k) => k.includes(ql)) || p.description.toLowerCase().includes(ql)));
+    // PLC mode lists the electrical-control parts and meters first
+    const rank = (p: PartDef) => (plcMode ? (p.category === "control" ? 0 : p.category === "instrument" ? 1 : 2) : p.category === "control" ? 2 : p.category === "instrument" ? 1 : 0);
+    return [...list].sort((a, b) => rank(a) - rank(b));
+  }, [q, cat, custom, plcMode]);
   const addCenter = (type: string) => {
     const b = getBoard(project.boardId);
     const bi = project.parts.find(isBoard);
@@ -73,7 +79,7 @@ export function PartsPanel() {
           <>
             <h3 className="group-title">Boards</h3>
             <div className="card-grid boards">
-              {BOARDS.map((b, i) => (
+              {BOARDS.filter((b) => (b.family === "plc") === plcMode).map((b, i) => (
                 <button key={b.id} style={{ ["--i" as string]: i }} className={`card-pick stagger tilt ${project.boardId === b.id ? "on" : ""}`} onClick={() => setBoard(b.id)} title={`${b.name} · ${b.mcu}`}>
                   <svg viewBox={`-2 -2 ${b.width + 4} ${b.height + 4}`} className="thumb">
                     <SvgDefs />
