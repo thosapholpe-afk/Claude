@@ -1,15 +1,18 @@
-import { ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
+import { ContactShadows, Environment, Lightformer, OrbitControls } from "@react-three/drei";
+import { Bloom, EffectComposer, ToneMapping, Vignette } from "@react-three/postprocessing";
+import { ToneMappingMode } from "postprocessing";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { builtinLedId, builtinLedLit, getBoard } from "../core/boards";
 import { buildTopology, endpointPos, footprintOf, instBounds, isBoard, isHost } from "../core/circuit";
 import { getScenario, vibAccel } from "../core/env";
-import { getPart, LED_HEX, type PartLive } from "../core/parts";
+import { getPart } from "../core/parts";
 import { engine } from "../core/sim";
 import type { BoardDef, PartInstance } from "../core/types";
 import { useStudio } from "../store";
 import { SCENARIO_ICON } from "./EnvPanel";
+import { PartModel } from "./three/parts3d";
 import { BoardModel, computeStack, HostModel } from "./three/models";
 
 const S = 0.1; // 1 unit = 10 mm
@@ -57,285 +60,7 @@ function Placed({ inst, w, h, lift, children }: { inst: PartInstance; w: number;
   );
 }
 
-// ---------------------------------------------------------------- parts
-function LcdScreen({ lines, lit }: { lines: string[]; lit: boolean }) {
-  const tex = useMemo(() => {
-    const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 144;
-    return { c, t: new THREE.CanvasTexture(c) };
-  }, []);
-  useEffect(() => {
-    const g = tex.c.getContext("2d")!;
-    g.fillStyle = lit ? "#8fd14f" : "#344326";
-    g.fillRect(0, 0, 512, 144);
-    g.fillStyle = "#10240a";
-    g.font = "bold 52px IBM Plex Mono, monospace";
-    (lines ?? []).slice(0, 2).forEach((l, i) => g.fillText(l.replace(String.fromCharCode(223), "°").padEnd(16).slice(0, 16), 14, 58 + i * 66));
-    tex.t.needsUpdate = true;
-  }, [lines, lit, tex]);
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[6.5, 1.8]} />
-      <meshStandardMaterial map={tex.t} emissive={lit ? "#a6ff5c" : "#000"} emissiveIntensity={lit ? 0.35 : 0} emissiveMap={tex.t} />
-    </mesh>
-  );
-}
-
-export function Part3D({ inst, lift = 0 }: { inst: PartInstance; lift?: number }) {
-  const def = getPart(inst.type);
-  const lv = useStudio((s) => s.snap?.live[inst.id]) as PartLive | undefined;
-  const horn = useRef<THREE.Group>(null);
-  const fan = useRef<THREE.Group>(null);
-  useFrame((_, dt) => {
-    if (horn.current && lv?.angle !== undefined) horn.current.rotation.y = THREE.MathUtils.degToRad(90 - lv.angle);
-    if (fan.current) fan.current.rotation.y += (lv?.speed ?? 0) * dt * 40;
-  });
-  if (!def) return null;
-  const cx = def.w / 2;
-  const cy = def.h / 2;
-  const rot = -THREE.MathUtils.degToRad(inst.rot);
-  const w = def.w * S;
-  const h = def.h * S;
-  const pcb = (color: string, ww = w, hh = h) => (
-    <RoundedBox args={[ww, 0.16, hh]} radius={0.03} position={[0, 0.08, 0]} castShadow receiveShadow>
-      <meshStandardMaterial color={color} roughness={0.55} />
-    </RoundedBox>
-  );
-  let body: ReactElement;
-  switch (def.type) {
-    case "led": {
-      const col = LED_HEX[String(inst.props.color)] ?? "#ff2a2a";
-      const b = Math.min(1.3, lv?.brightness ?? 0);
-      body = (
-        <group position={[0, 0, -0.2]}>
-          <mesh position={[0, 0.45, 0]} castShadow>
-            <cylinderGeometry args={[0.25, 0.25, 0.55, 24]} />
-            <meshStandardMaterial color={lv?.burnt ? "#3a2a20" : col} transparent opacity={0.85} emissive={col} emissiveIntensity={b * 4} roughness={0.2} />
-          </mesh>
-          <mesh position={[0, 0.72, 0]} castShadow>
-            <sphereGeometry args={[0.25, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <meshStandardMaterial color={lv?.burnt ? "#3a2a20" : col} transparent opacity={0.85} emissive={col} emissiveIntensity={b * 4} roughness={0.2} />
-          </mesh>
-          {b > 0.05 && <pointLight position={[0, 0.9, 0]} color={col} intensity={b * 2.5} distance={4} decay={2} />}
-        </group>
-      );
-      break;
-    }
-    case "servo-sg90":
-    case "servo-mg996r": {
-      const big = def.type === "servo-mg996r";
-      const bw = (big ? 40.7 : 23) * S;
-      const bh = (big ? 19.7 : 12.2) * S;
-      const bz = (big ? 36 : 22) * S;
-      const bx = ((big ? 12 : 13) - cx) * S + bw / 2;
-      const hubX = ((big ? 22 : 19) - cx) * S;
-      body = (
-        <group>
-          <mesh position={[bx, bz / 2, 0]} castShadow>
-            <boxGeometry args={[bw, bz, bh]} />
-            <meshStandardMaterial color={big ? "#1b1c1f" : "#2a6fd6"} roughness={0.4} transparent={!big} opacity={big ? 1 : 0.92} />
-          </mesh>
-          <mesh position={[hubX, bz + 0.08, 0]}>
-            <cylinderGeometry args={[0.28, 0.28, 0.16, 20]} />
-            <meshStandardMaterial color="#e8e8e4" />
-          </mesh>
-          <group ref={horn} position={[hubX, bz + 0.2, 0]}>
-            <mesh position={[(big ? 0.7 : 0.5), 0, 0]} castShadow>
-              <boxGeometry args={[big ? 1.6 : 1.1, 0.07, 0.24]} />
-              <meshStandardMaterial color="#f4f4f0" />
-            </mesh>
-          </group>
-        </group>
-      );
-      break;
-    }
-    case "hc-sr04":
-      body = (
-        <group>
-          {pcb("#1d5fa8")}
-          {[-1.13, 1.13].map((x) => (
-            <mesh key={x} position={[x, 0.16 + 0.6, -0.15]} rotation={[0, 0, 0]} castShadow>
-              <cylinderGeometry args={[0.8, 0.8, 1.2, 28]} />
-              <meshStandardMaterial color="#c9ced3" metalness={0.85} roughness={0.35} />
-            </mesh>
-          ))}
-        </group>
-      );
-      break;
-    case "dht22":
-      body = (
-        <mesh position={[0, 0.39, -0.1]} castShadow>
-          <boxGeometry args={[1.51, 0.77, 2]} />
-          <meshStandardMaterial color="#f1f1ec" roughness={0.7} />
-        </mesh>
-      );
-      break;
-    case "lcd1602":
-      body = (
-        <group>
-          {pcb("#1f6b3a")}
-          <mesh position={[0, 0.5, 0]} castShadow>
-            <boxGeometry args={[7.1, 0.7, 2.5]} />
-            <meshStandardMaterial color="#0d0f10" />
-          </mesh>
-          <group position={[0, 0.86, 0]}>
-            <LcdScreen lines={lv?.text ?? ["", ""]} lit={!!lv?.backlight && !!lv?.powered} />
-          </group>
-        </group>
-      );
-      break;
-    case "neopixel-ring": {
-      const n = Number(inst.props.count ?? 12);
-      body = (
-        <group position={[0, 0, (18.5 - cy) * S]}>
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]} receiveShadow>
-            <ringGeometry args={[1.15, 1.83, 48]} />
-            <meshStandardMaterial color="#141518" side={THREE.DoubleSide} />
-          </mesh>
-          {Array.from({ length: n }, (_, i) => {
-            const a = (i / n) * Math.PI * 2 - Math.PI / 2;
-            const c = lv?.pixels?.[i] ?? 0;
-            const col = new THREE.Color(((c >> 16) & 255) / 255, ((c >> 8) & 255) / 255, (c & 255) / 255);
-            const on = c > 0;
-            return (
-              <mesh key={i} position={[Math.cos(a) * 1.5, 0.18, Math.sin(a) * 1.5]}>
-                <boxGeometry args={[0.5, 0.16, 0.5]} />
-                <meshStandardMaterial color={on ? col : "#eeeeea"} emissive={col} emissiveIntensity={on ? 3 : 0} />
-              </mesh>
-            );
-          })}
-        </group>
-      );
-      break;
-    }
-    case "buzzer":
-      body = (
-        <mesh position={[0, 0.48, -0.1]} castShadow>
-          <cylinderGeometry args={[0.6, 0.6, 0.95, 32]} />
-          <meshStandardMaterial color="#141518" emissive={lv?.on ? "#e8d4a2" : "#000"} emissiveIntensity={lv?.on ? 0.15 : 0} />
-        </mesh>
-      );
-      break;
-    case "dc-motor":
-      body = (
-        <group position={[(19.5 - cx) * S, 0, (10 - cy) * S]}>
-          <mesh position={[0, 1, 0]} castShadow>
-            <cylinderGeometry args={[0.95, 0.95, 2, 28]} />
-            <meshStandardMaterial color="#c9ced3" metalness={0.8} roughness={0.3} />
-          </mesh>
-          <group ref={fan} position={[0, 2.15, 0]}>
-            {[0, 1, 2].map((k) => (
-              <mesh key={k} rotation={[0.3, (k * Math.PI * 2) / 3, 0]} position={[Math.cos((k * Math.PI * 2) / 3) * 0.7, 0, -Math.sin((k * Math.PI * 2) / 3) * 0.7]}>
-                <boxGeometry args={[1.2, 0.04, 0.45]} />
-                <meshStandardMaterial color="#e8d4a2" transparent opacity={0.8} />
-              </mesh>
-            ))}
-          </group>
-        </group>
-      );
-      break;
-    case "pir":
-      body = (
-        <group>
-          {pcb("#2f7d3b")}
-          <mesh position={[0, 0.2, (10.4 - cy) * S]} castShadow>
-            <sphereGeometry args={[0.96, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <meshStandardMaterial color="#f4f4f1" roughness={0.3} transparent opacity={0.95} emissive={lv?.on ? "#ff4d4d" : "#000"} emissiveIntensity={lv?.on ? 0.3 : 0} />
-          </mesh>
-        </group>
-      );
-      break;
-    case "mq2":
-      body = (
-        <group>
-          {pcb("#1d5fa8")}
-          <mesh position={[0, 0.16 + 0.75, (9.5 - cy) * S]} castShadow>
-            <cylinderGeometry args={[0.86, 0.86, 1.5, 28]} />
-            <meshStandardMaterial color="#b9c0c6" metalness={0.7} roughness={0.5} />
-          </mesh>
-        </group>
-      );
-      break;
-    case "water":
-      body = (
-        <group>
-          {pcb("#c62828")}
-          <mesh position={[0, 0.165, -0.8]}>
-            <boxGeometry args={[1.6, 0.01, 4]} />
-            <meshStandardMaterial color="#d9b25a" metalness={0.8} roughness={0.3} />
-          </mesh>
-        </group>
-      );
-      break;
-    case "resistor":
-      body = (
-        <mesh position={[0, 0.15, 0]} rotation={[0, 0, Math.PI / 2]} castShadow>
-          <capsuleGeometry args={[0.11, 0.3, 4, 12]} />
-          <meshStandardMaterial color="#d8c08f" />
-        </mesh>
-      );
-      break;
-    case "button":
-      body = (
-        <group>
-          <mesh position={[0, 0.17, 0]} castShadow>
-            <boxGeometry args={[0.7, 0.34, 0.7]} />
-            <meshStandardMaterial color="#1d1f22" />
-          </mesh>
-          <mesh position={[0, lv?.on ? 0.36 : 0.44, 0]}>
-            <cylinderGeometry args={[0.24, 0.24, 0.2, 20]} />
-            <meshStandardMaterial color={{ red: "#e5322d", blue: "#2f6fe0", green: "#2fae4f", yellow: "#f0c419", black: "#222" }[String(inst.props.cap)] ?? "#e5322d"} />
-          </mesh>
-        </group>
-      );
-      break;
-    case "pot":
-      body = (
-        <group>
-          <mesh position={[0, 0.4, -0.15]} castShadow>
-            <boxGeometry args={[0.96, 0.8, 0.74]} />
-            <meshStandardMaterial color="#1f5fd1" />
-          </mesh>
-          <mesh position={[0, 1.05, -0.15]} rotation={[0, -(Number(inst.props.position ?? 0.5) - 0.5) * 4.7, 0]} castShadow>
-            <cylinderGeometry args={[0.3, 0.3, 0.6, 18]} />
-            <meshStandardMaterial color="#e2e5e8" metalness={0.4} />
-          </mesh>
-        </group>
-      );
-      break;
-    case "relay":
-      body = (
-        <group>
-          {pcb("#1d5fa8")}
-          <mesh position={[(23.5 - cx) * S, 0.16 + 0.8, (11 - cy) * S]} castShadow>
-            <boxGeometry args={[1.9, 1.6, 1.56]} />
-            <meshStandardMaterial color="#2b67d0" />
-          </mesh>
-          <mesh position={[(45 - cx) * S, 0.16 + 0.5, 0]} castShadow>
-            <boxGeometry args={[0.8, 1, 1.7]} />
-            <meshStandardMaterial color="#1e5bd6" />
-          </mesh>
-        </group>
-      );
-      break;
-    default: {
-      const color = def.custom?.color ?? (["flame", "sound"].includes(def.type) ? "#16181b" : def.type === "adxl335" ? "#5b2f8f" : def.type === "soil" ? "#141518" : "#1d5fa8");
-      body = (
-        <group>
-          {pcb(color)}
-          {lv?.indicator && <pointLight position={[0, 0.4, 0]} color="#33ff88" intensity={0.6} distance={1.5} />}
-        </group>
-      );
-    }
-  }
-  return (
-    <group position={[(inst.x + cx) * S, lift * S, (inst.y + cy) * S]} rotation={[0, rot, 0]}>
-      {body}
-    </group>
-  );
-}
-
+// ---------------------------------------------------------------- wires
 export function Wires3D({ pinTop, only }: { pinTop: (part: string) => number; only?: Set<string> }) {
   const project = useStudio((s) => s.project);
   const tubes = useMemo(() => {
@@ -356,9 +81,10 @@ export function Wires3D({ pinTop, only }: { pinTop: (part: string) => number; on
           new THREE.Vector3(b.x * S, hb + lift * 0.7, b.y * S),
           new THREE.Vector3(b.x * S, hb, b.y * S),
         ];
-        return { id: w.id, color: w.color, geo: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.045, 8, false) };
+        const curve = new THREE.CatmullRomCurve3(pts);
+        return { id: w.id, color: w.color, curve, geo: new THREE.TubeGeometry(curve, 40, 0.045, 8, false) };
       })
-      .filter(Boolean) as { id: string; color: string; geo: THREE.TubeGeometry }[];
+      .filter(Boolean) as { id: string; color: string; curve: THREE.CatmullRomCurve3; geo: THREE.TubeGeometry }[];
   }, [project.wires, project.parts, pinTop, only]);
   return (
     <group>
@@ -367,9 +93,51 @@ export function Wires3D({ pinTop, only }: { pinTop: (part: string) => number; on
           <meshStandardMaterial color={t.color} roughness={0.45} />
         </mesh>
       ))}
+      <CurrentFlow tubes={tubes} />
     </group>
   );
 }
+
+/** Bright beads running along wires that carry a live signal — direction follows the voltage. */
+function CurrentFlow({ tubes }: { tubes: { id: string; color: string; curve: THREE.CatmullRomCurve3 }[] }) {
+  const PER = 4;
+  const mesh = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const col = useMemo(() => new THREE.Color(), []);
+  const lengths = useMemo(() => tubes.map((t) => t.curve.getLength()), [tubes]);
+  useFrame(({ clock }) => {
+    const m = mesh.current;
+    if (!m) return;
+    const snap = live();
+    const t = clock.elapsedTime;
+    let k = 0;
+    tubes.forEach((tb, i) => {
+      const v = snap?.running ? snap.wireV[tb.id] ?? 0 : 0;
+      const on = v > 0.4;
+      for (let j = 0; j < PER; j++) {
+        if (on) {
+          const u = (t * (0.9 / Math.max(0.5, lengths[i])) * (1 + v * 0.2) + j / PER) % 1;
+          dummy.position.copy(tb.curve.getPointAt(u));
+          dummy.scale.setScalar(0.06 + 0.012 * Math.min(5, v));
+        } else dummy.scale.setScalar(0.00001);
+        dummy.updateMatrix();
+        m.setMatrixAt(k, dummy.matrix);
+        m.setColorAt(k, col.set(tb.color).lerp(WHITE, 0.55).multiplyScalar(2.2));
+        k++;
+      }
+    });
+    m.count = k;
+    m.instanceMatrix.needsUpdate = true;
+    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+  });
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, Math.max(1, tubes.length * PER)]} key={tubes.length}>
+      <sphereGeometry args={[1, 10, 8]} />
+      <meshBasicMaterial toneMapped={false} />
+    </instancedMesh>
+  );
+}
+const WHITE = new THREE.Color("#ffffff");
 
 // ---------------------------------------------------------------- environments
 function Fire({ span }: { span: number }) {
@@ -438,6 +206,63 @@ function Water({ span }: { span: number }) {
   return (
     <mesh ref={ref} geometry={geo} rotation={[-Math.PI / 2, 0, 0]}>
       <meshPhysicalMaterial color="#2a7fd4" transparent opacity={0.55} roughness={0.05} metalness={0.1} transmission={0.2} />
+    </mesh>
+  );
+}
+
+/** Falling rain streaks; density follows env.rain. */
+function Rain({ span }: { span: number }) {
+  const N = 1400;
+  const mesh = useRef<THREE.InstancedMesh>(null);
+  const seeds = useMemo(() => Array.from({ length: N }, () => ({ x: (Math.random() - 0.5) * span * 2.6, z: (Math.random() - 0.5) * span * 2.6, s: Math.random(), v: 0.8 + Math.random() * 0.5 })), [span]);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  useFrame(({ clock }) => {
+    const m = mesh.current;
+    if (!m) return;
+    const rain = live()?.env.rain ?? 0;
+    const shown = Math.floor(N * Math.min(1, rain * 1.1));
+    const t = clock.elapsedTime;
+    const top = span * 1.4;
+    seeds.forEach((p, i) => {
+      if (i >= shown) dummy.scale.setScalar(0.00001);
+      else {
+        const life = (t * p.v * 1.3 + p.s) % 1;
+        dummy.position.set(p.x + life * 0.6, top * (1 - life), p.z);
+        dummy.scale.set(1, 1, 1);
+      }
+      dummy.rotation.set(0, 0, 0.12);
+      dummy.updateMatrix();
+      m.setMatrixAt(i, dummy.matrix);
+    });
+    m.instanceMatrix.needsUpdate = true;
+  });
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, N]}>
+      <boxGeometry args={[0.012, 0.45, 0.012]} />
+      <meshBasicMaterial color="#a9c6ea" transparent opacity={0.55} depthWrite={false} />
+    </instancedMesh>
+  );
+}
+
+/** Lightning bolt that flashes with the storm's light spikes. */
+function Lightning({ span }: { span: number }) {
+  const bolt = useRef<THREE.Mesh>(null);
+  const geo = useMemo(() => {
+    const pts: THREE.Vector3[] = [];
+    let x = 0;
+    for (let i = 0; i <= 14; i++) {
+      pts.push(new THREE.Vector3(x, span * 2.2 - (i / 14) * span * 2.2, 0));
+      x += (Math.random() - 0.5) * span * 0.25;
+    }
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, 0.05, 5, false);
+  }, [span]);
+  useFrame(() => {
+    const lux = live()?.env.lux ?? 0;
+    if (bolt.current) bolt.current.visible = lux > 25000;
+  });
+  return (
+    <mesh ref={bolt} geometry={geo} position={[span * 0.9, 0, -span * 1.6]} visible={false}>
+      <meshBasicMaterial color="#dfe8ff" toneMapped={false} />
     </mesh>
   );
 }
@@ -580,7 +405,13 @@ export function Instance3D({ inst, board, lift }: { inst: PartInstance; board: B
       </Placed>
     );
   }
-  return <Part3D inst={inst} lift={lift} />;
+  const def = getPart(inst.type);
+  if (!def) return null;
+  return (
+    <Placed inst={inst} w={def.w} h={def.h} lift={lift}>
+      <PartModel inst={inst} def={def} />
+    </Placed>
+  );
 }
 
 function Circuit3D() {
@@ -612,9 +443,9 @@ function Atmosphere() {
       fogC = "#2a1610";
       density = 0.015 + Math.min(1, (env?.smoke ?? 0) / 3000) * 0.05;
     } else if (scenario === "cold-storage") {
-      bg = "#bcd6e6";
-      fogC = "#cfe3ef";
-      density = 0.03;
+      bg = "#a9c6d8";
+      fogC = "#bcd6e6";
+      density = 0.016;
     } else if (scenario === "gas-leak") {
       bg = "#0e1a0b";
       fogC = "#40602a";
@@ -628,6 +459,12 @@ function Atmosphere() {
       bg = "#0b1620";
       fogC = "#123040";
       density = 0.02;
+    } else if (scenario === "storm") {
+      const flash = Math.min(1, Math.max(0, ((env?.lux ?? 0) - 20000) / 50000));
+      const c = new THREE.Color("#1a2230").lerp(new THREE.Color("#0b0f16"), Math.min(1, (env?.rain ?? 0) * 1.2)).lerp(new THREE.Color("#c9d6ff"), flash * 0.7);
+      bg = `#${c.getHexString()}`;
+      fogC = bg;
+      density = 0.012 + (env?.rain ?? 0) * 0.03;
     }
     scene.background = new THREE.Color(bg);
     scene.fog = new THREE.FogExp2(fogC, density);
@@ -649,6 +486,10 @@ function Lights() {
     } else if (scenario === "building-fire") {
       sun.current.intensity = 1.1;
       amb.current.intensity = 0.45;
+    } else if (scenario === "storm") {
+      const flash = Math.min(1, Math.max(0, ((env?.lux ?? 0) - 20000) / 50000));
+      sun.current.intensity = 0.5 + flash * 9;
+      amb.current.intensity = 0.25 + flash * 1.5;
     } else {
       sun.current.intensity = 2.4;
       amb.current.intensity = 0.7;
@@ -660,6 +501,36 @@ function Lights() {
       <hemisphereLight args={["#f6efe6", "#2e2e33", 0.8]} />
       <directionalLight ref={sun} position={[8, 14, 6]} intensity={2.2} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-20} shadow-camera-right={20} shadow-camera-top={20} shadow-camera-bottom={-20} />
     </>
+  );
+}
+
+/** Soft studio lights for metal and plastic reflections (rendered once, no network fetch). */
+export function StudioReflections() {
+  return (
+    <Environment resolution={256} frames={1}>
+      <Lightformer intensity={1.6} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#ffffff" />
+      <Lightformer intensity={1.1} position={[-6, 2, 3]} rotation={[0, Math.PI / 2, 0]} scale={[8, 3, 1]} color="#e8d4a2" />
+      <Lightformer intensity={0.9} position={[6, 2, -3]} rotation={[0, -Math.PI / 2, 0]} scale={[8, 3, 1]} color="#bcd9a2" />
+      <Lightformer intensity={0.35} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[10, 10, 1]} color="#e9e4dc" />
+    </Environment>
+  );
+}
+
+/** Bloom on anything brighter than white (LEDs, displays, current beads), filmic tone mapping. */
+export function Glow({ vignette = true }: { vignette?: boolean }) {
+  return (
+    vignette ? (
+      <EffectComposer multisampling={4}>
+        <Bloom mipmapBlur luminanceThreshold={1} luminanceSmoothing={0.2} intensity={0.85} radius={0.65} />
+        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+        <Vignette eskil={false} offset={0.25} darkness={0.45} />
+      </EffectComposer>
+    ) : (
+      <EffectComposer multisampling={4}>
+        <Bloom mipmapBlur luminanceThreshold={1} luminanceSmoothing={0.2} intensity={0.85} radius={0.65} />
+        <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+      </EffectComposer>
+    )
   );
 }
 
@@ -690,7 +561,7 @@ export function Twin3D() {
   const Icon = SCENARIO_ICON[scenario.id];
   return (
     <div className="twin3d">
-      <Canvas shadows dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 400 }} gl={{ antialias: true }}>
+      <Canvas shadows flat dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 400 }} gl={{ antialias: true }}>
         <CameraRig preset={preset} span={span} />
         <Atmosphere />
         <Lights />
@@ -702,10 +573,14 @@ export function Twin3D() {
         )}
         {scenario.id === "building-fire" && <Fire span={span} />}
         {scenario.id === "flood" && <Water span={span} />}
+        {(scenario.id === "storm" || scenario.id === "flood") && <Rain span={span} />}
+        {scenario.id === "storm" && <Lightning span={span} />}
         {scenario.id === "intruder" && <Person span={span} />}
         {scenario.id === "greenhouse" && <Plants span={span} />}
         <ContactShadows position={[0, 0.001, 0]} opacity={0.5} scale={span * 3} blur={2.4} far={4} />
+        <StudioReflections />
         <OrbitControls makeDefault enableDamping maxPolarAngle={Math.PI * 0.49} minDistance={2} maxDistance={120} />
+        <Glow />
       </Canvas>
       <div className="twin-hud">
         <div className="seg">
@@ -766,6 +641,16 @@ export function Twin3D() {
             )}
             {(scenario.id === "day-night" || scenario.id === "greenhouse") && (
               <>
+                <dt>Light</dt>
+                <dd>{env.lux.toFixed(0)} lx</dd>
+              </>
+            )}
+            {scenario.id === "storm" && (
+              <>
+                <dt>Pressure</dt>
+                <dd>{env.pressure.toFixed(1)} hPa</dd>
+                <dt>Rain</dt>
+                <dd>{(env.rain * 100).toFixed(0)} %</dd>
                 <dt>Light</dt>
                 <dd>{env.lux.toFixed(0)} lx</dd>
               </>

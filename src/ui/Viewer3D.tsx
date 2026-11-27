@@ -9,7 +9,7 @@ import { instBounds, isBoard, isHost } from "../core/circuit";
 import { getPart } from "../core/parts";
 import type { BoardDef, PartInstance } from "../core/types";
 import { useStudio } from "../store";
-import { Instance3D, useStack, Wires3D } from "./Twin3D";
+import { Glow, Instance3D, useStack, Wires3D } from "./Twin3D";
 
 const S = 0.1;
 const VIEWS: Record<string, [number, number, number]> = {
@@ -76,6 +76,9 @@ function Scene({ shown, view, spin, explode, onDims, onUserMove }: { shown: Show
   const controls = useThree((s) => s.controls) as unknown as { target: THREE.Vector3; update(): void; addEventListener(t: string, f: () => void): void; removeEventListener(t: string, f: () => void): void } | null;
   const anim = useRef(0);
   const lastDims = useRef("");
+  /** Largest measured extent and mid-height (scene units), so tall parts (joystick, servo) frame fully. */
+  const extent = useRef(0);
+  const midY = useRef(0.4);
   useEffect(() => {
     anim.current = 1;
   }, [view, shown.title, explode]);
@@ -88,24 +91,30 @@ function Scene({ shown, view, spin, explode, onDims, onUserMove }: { shown: Show
   const frame = useRef(0);
   useFrame((_, dt) => {
     frame.current++;
-    if (content.current && frame.current % 20 === 0) {
-      const b = new THREE.Box3().setFromObject(content.current);
+    if (content.current && (frame.current < 6 || frame.current % 20 === 0)) {
+      const b = solidBounds(content.current);
       if (!b.isEmpty()) {
         const sz = b.getSize(new THREE.Vector3()).divideScalar(S);
         const key = `${sz.x.toFixed(1)}|${sz.z.toFixed(1)}|${sz.y.toFixed(1)}`;
         if (key !== lastDims.current) {
+          const grew = Math.max(sz.x, sz.y, sz.z) * S > extent.current * 1.05;
+          extent.current = Math.max(sz.x, sz.y, sz.z) * S;
+          midY.current = Math.max(0.2, (b.min.y + b.max.y) / 2);
           lastDims.current = key;
           onDims([sz.x, sz.z, sz.y]);
+          if (grew) anim.current = 1;
         }
       }
     }
     if (anim.current > 0 && controls) {
-      const d = Math.max(3.6, center.span * (explode ? 2.05 : 1.8));
+      const size = Math.max(center.span, extent.current);
+      const d = Math.max(3.6, size * (explode ? 2.3 : 2.1));
+      const lookY = midY.current;
       const dir = new THREE.Vector3(...(VIEWS[view] ?? VIEWS.iso)).normalize();
-      const goal = dir.multiplyScalar(d).add(new THREE.Vector3(0, 0.4, 0));
+      const goal = dir.multiplyScalar(d).add(new THREE.Vector3(0, lookY, 0));
       const k = 1 - Math.exp(-dt * 5);
       camera.position.lerp(goal, k);
-      controls.target.lerp(new THREE.Vector3(0, 0.4, 0), k);
+      controls.target.lerp(new THREE.Vector3(0, midY.current, 0), k);
       controls.update();
       anim.current = camera.position.distanceTo(goal) < 0.02 ? 0 : anim.current;
     }
@@ -124,6 +133,28 @@ function Scene({ shown, view, spin, explode, onDims, onUserMove }: { shown: Show
       <OrbitControls makeDefault enableDamping dampingFactor={0.08} autoRotate={spin} autoRotateSpeed={1.1} minDistance={1} maxDistance={80} />
     </>
   );
+}
+
+/** Bounding box of visible solid geometry — skips effects (ripples, pings, beams, smoke) and lights. */
+function solidBounds(root: THREE.Object3D) {
+  const box = new THREE.Box3();
+  const tmp = new THREE.Box3();
+  root.updateWorldMatrix(true, true);
+  root.traverseVisible((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material;
+    if (mat?.transparent && !mat.depthWrite) return;
+    const im = o as THREE.InstancedMesh;
+    if (im.isInstancedMesh) {
+      im.computeBoundingBox();
+      if (im.boundingBox) box.union(tmp.copy(im.boundingBox).applyMatrix4(im.matrixWorld));
+      return;
+    }
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    box.union(tmp.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld));
+  });
+  return box;
 }
 
 function HoleSize({ inst }: { inst: PartInstance }) {
@@ -179,7 +210,7 @@ export function Viewer3DModal() {
   return (
     <motion.div className="modal-back v3d-back" initial={{ opacity: 0 }} animate={{ opacity: 1 }} onPointerDown={(e) => e.target === e.currentTarget && close()}>
       <motion.div className="v3d" role="dialog" aria-modal="true" aria-label="3D viewer" initial={{ opacity: 0, y: 18, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}>
-        <Canvas shadows dpr={[1, 2]} camera={{ fov: 35, near: 0.05, far: 300, position: [6, 5, 8] }} gl={{ antialias: true, alpha: true }}>
+        <Canvas shadows flat dpr={[1, 2]} camera={{ fov: 35, near: 0.05, far: 300, position: [6, 5, 8] }} gl={{ antialias: true, alpha: true }}>
           <ambientLight intensity={0.35} />
           <directionalLight position={[6, 10, 5]} intensity={2.4} castShadow shadow-mapSize={[2048, 2048]} shadow-bias={-0.0004} />
           <directionalLight position={[-6, 3, -4]} intensity={0.7} color="#f5d0c4" />
@@ -191,6 +222,7 @@ export function Viewer3DModal() {
             <Lightformer intensity={0.5} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[10, 10, 1]} color="#e9e4dc" />
           </Environment>
           <Scene shown={shown} view={view} spin={spin} explode={explode} onDims={setDims} onUserMove={() => setSpin(false)} />
+          <Glow vignette={false} />
         </Canvas>
 
         <header className="v3d-head">

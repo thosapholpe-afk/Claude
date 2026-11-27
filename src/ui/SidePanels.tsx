@@ -102,9 +102,8 @@ export function PartsPanel() {
                   e.dataTransfer.setData("application/x-tconnect-part", p.type);
                   e.dataTransfer.effectAllowed = "copy";
                 }}
-                onDoubleClick={() => addCenter(p.type)}
-                onClick={(e) => e.detail === 1 && setTimeout(() => {}, 0)}
-                title={`${p.description}\nDrag onto the canvas or double-click to add`}
+                onClick={() => addCenter(p.type)}
+                title={`${p.description}\nClick to add, or drag onto the canvas`}
               >
                 <PartThumb def={p} />
                 <span>{p.name}</span>

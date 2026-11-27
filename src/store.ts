@@ -231,7 +231,7 @@ export const useStudio = create<State>((set, get) => ({
         },
       ],
     }));
-    set({ selection: [id], selectedWire: null, burst: { x: x + fp.w / 2, y: y + fp.h / 2, t: Date.now() } });
+    set((st) => ({ selection: [id], selectedWire: null, selKey: st.selKey + 1, burst: { x: x + fp.w / 2, y: y + fp.h / 2, t: Date.now() } }));
     return id;
   },
   movePart: (id, x, y, history = false) => get().commit((p) => ({ ...p, parts: p.parts.map((q) => (q.id === id ? { ...q, x, y } : q)) }), history),

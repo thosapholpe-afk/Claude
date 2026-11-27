@@ -57,7 +57,7 @@ export function useSvgTexture(key: string, w: number, h: number, render: () => R
   return tex;
 }
 
-function useLabelTexture(text: string, fg: string, bg: string, w: number, h: number) {
+export function useLabelTexture(text: string, fg: string, bg: string, w: number, h: number) {
   return useMemo(() => {
     const k = 40;
     const c = document.createElement("canvas");
@@ -100,12 +100,12 @@ function seeded(seed: string) {
   };
 }
 
-const METAL = { color: "#c6ccd2", metalness: 0.9, roughness: 0.28 };
-const GOLD = { color: "#e6bd5c", metalness: 0.75, roughness: 0.32 };
-const PLASTIC = { color: "#17181b", metalness: 0.05, roughness: 0.7 };
+export const METAL = { color: "#c6ccd2", metalness: 0.9, roughness: 0.28 };
+export const GOLD = { color: "#e6bd5c", metalness: 0.75, roughness: 0.32 };
+export const PLASTIC = { color: "#17181b", metalness: 0.05, roughness: 0.7 };
 
 /** Instanced boxes for many identical small parts (pins, SMD bodies). */
-function Boxes({ items, size, material }: { items: { x: number; y: number; z: number; rot?: number; color?: string }[]; size: [number, number, number]; material: THREE.MeshStandardMaterialParameters }) {
+export function Boxes({ items, size, material }: { items: { x: number; y: number; z: number; rot?: number; color?: string }[]; size: [number, number, number]; material: THREE.MeshStandardMaterialParameters }) {
   const mesh = useMemo(() => {
     const geo = new THREE.BoxGeometry(...size);
     const mat = new THREE.MeshStandardMaterial(material);
@@ -454,6 +454,14 @@ export function BoardModel({ board, powered = false, ledOn = false }: { board: B
 
 export const HOST_TOP: Record<string, number> = { breadboard: 8.5, perfboard: 1.6 };
 
+/** Through-hole parts stand on their legs; modules sit on header plastic; cables end in dupont plugs. */
+const THROUGH_HOLE = new Set(["led", "rgb-led", "resistor", "ldr", "lm35", "button", "pot", "buzzer"]);
+const CABLED = new Set(["servo-sg90", "servo-mg996r", "dc-motor", "ds18b20", "pulse"]);
+/** Height (mm) above the standing surface where a jumper wire meets a part's pins. */
+export function partPinTop(type: string) {
+  return THROUGH_HOLE.has(type) ? 1.2 : CABLED.has(type) ? 4 : 5.1;
+}
+
 /** Breadboard / perfboard body with its 2D artwork on top. Origin = top-left corner at the floor. */
 export function HostModel({ inst }: { inst: PartInstance }) {
   const fp = footprintOf(inst)!;
@@ -517,7 +525,7 @@ export function computeStack(parts: PartInstance[], inserted: { part: string; bb
     const base = lift.get(partId) ?? 0;
     if (isHost(inst)) return base + (HOST_TOP[inst.type] ?? 1.6) + 0.3;
     if (isBoard(inst)) return base + board.thickness + (style === "male-down" ? 1.3 : style === "female-up" ? 8.5 : SPACER + 6);
-    return base + 5.5;
+    return base + partPinTop(inst.type);
   };
   return { lift, pinTop, hostOf };
 }
