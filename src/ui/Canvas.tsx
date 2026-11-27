@@ -119,6 +119,7 @@ export function Canvas() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.closest?.(".cm-editor")) return;
       const st = useStudio.getState();
+      if (st.modal) return; // a dialog owns the keyboard
       if (e.key === "Escape") {
         setPending(null);
         st.select([]);
@@ -178,6 +179,16 @@ export function Canvas() {
     const arr = [...project.parts];
     return arr.sort((a, b) => (isHost(a) ? -1 : isHost(b) ? 1 : isBoard(a) ? -1 : isBoard(b) ? 1 : 0));
   }, [project.parts]);
+  const coverRects = useMemo(
+    () =>
+      project.parts
+        .filter((p) => !isHost(p))
+        .map((p) => {
+          const b = instBounds(p);
+          return { x: b.x + 0.8, y: b.y + 0.8, w: b.w - 1.6, h: b.h - 1.6 };
+        }),
+    [project.parts],
+  );
 
   const inserted = useMemo(() => new Set((snapState?.inserted ?? []).map((i) => `${i.part}:${i.pin}`)), [snapState?.inserted]);
   const diagParts = useMemo(() => new Set((snapState?.diags ?? []).filter((d) => d.part).map((d) => d.part!)), [snapState?.diags]);
@@ -384,7 +395,7 @@ export function Canvas() {
             const builtin = board.builtinLed ?? (board.family === "rp2040" ? "LED" : undefined);
             const ledOn = !!(builtin && snapState?.drives[builtin]?.level);
             return (
-              <g key={inst.id} className={`part ${sel ? "is-selected" : ""}`} onPointerDown={(e) => onPointerDownPart(e, inst)}>
+              <g key={inst.id} data-id={inst.id} className={`part ${sel ? "is-selected" : ""}`} onPointerDown={(e) => onPointerDownPart(e, inst)}>
                 <g transform={`translate(${inst.x} ${inst.y}) rotate(${inst.rot} ${cx} ${cy})`}>
                   {isBoard(inst) ? (
                     <Board2D board={board} powered={running} ledOn={ledOn} />
@@ -420,6 +431,8 @@ export function Canvas() {
               return fp.pins.map((p) => {
                 const w = pinWorld(inst, fp, p);
                 const ins = inserted.has(`${inst.id}:${p.id}`);
+                // holes hidden under a mounted board/part can't be clicked — the part on top gets the click
+                if (bb && coverRects.some((r) => w.x > r.x && w.x < r.x + r.w && w.y > r.y && w.y < r.y + r.h)) return ins ? <circle key={`${inst.id}:${p.id}`} cx={w.x} cy={w.y} r={0.55} fill="var(--accent)" opacity={0.85} /> : null;
                 return (
                   <g key={`${inst.id}:${p.id}`}>
                     {ins && <circle cx={w.x} cy={w.y} r={0.55} fill="var(--accent)" opacity={0.85} />}

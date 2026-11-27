@@ -45,6 +45,7 @@ import { DrawingPanel, DrawingPreview, MqttPanel, TemplatesPanel } from "./Studi
 
 const Twin3D = lazy(() => import("./Twin3D").then((m) => ({ default: m.Twin3D })));
 const CasePreview = lazy(() => import("./CaseStudio").then((m) => ({ default: m.CasePreview })));
+const Viewer3DModal = lazy(() => import("./Viewer3D").then((m) => ({ default: m.Viewer3DModal })));
 const CasePanel = lazy(() => import("./CaseStudio").then((m) => ({ default: m.CasePanel })));
 const Loading = () => <div className="stage-msg">Loading 3D engine…</div>;
 
@@ -359,9 +360,10 @@ export function Editor() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  const selKey = useStudio((s) => s.selKey);
   useEffect(() => {
     if (hasSel) setRightTab("auto");
-  }, [hasSel]);
+  }, [hasSel, selKey]);
   const stage = view === "3d" ? <Twin3D /> : leftTab === "case" ? <CasePreview /> : leftTab === "drawing" ? <DrawingPreview /> : <Canvas />;
   return (
     <div className={`app ${running ? "is-running" : ""}`}>
@@ -426,6 +428,11 @@ export function Editor() {
       {modal === "custom-sensor" && <CustomSensorModal />}
       {modal === "scan" && <ScanModal />}
       {modal === "projects" && <ProjectsModal />}
+      {modal === "viewer3d" && (
+        <Suspense fallback={null}>
+          <Viewer3DModal />
+        </Suspense>
+      )}
       <Toasts />
       <SoundEngine />
     </div>

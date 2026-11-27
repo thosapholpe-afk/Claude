@@ -10,7 +10,7 @@ function shade(hex: string, amt: number) {
 }
 
 /** Group pins into straight header strips for drawing the black plastic housing. */
-function headerStrips(pins: BoardPin[]) {
+export function headerStrips(pins: BoardPin[]) {
   const strips: { x: number; y: number; w: number; h: number }[] = [];
   const byRow = new Map<string, BoardPin[]>();
   for (const p of pins) {
@@ -116,11 +116,14 @@ export const Board2D = memo(function Board2D({
   powered,
   ledOn,
   showLabels = true,
+  silk = false,
 }: {
   board: BoardDef;
   powered: boolean;
   ledOn: boolean;
   showLabels?: boolean;
+  /** Top-surface texture for 3D: PCB, copper and silkscreen only, mounting holes cut out. */
+  silk?: boolean;
 }) {
   const W = board.width;
   const H = board.height;
@@ -134,21 +137,29 @@ export const Board2D = memo(function Board2D({
           <stop offset="1" stopColor={shade(board.pcbColor, -14)} />
         </linearGradient>
       </defs>
-      <rect x={0.6} y={1.4} width={W} height={H} rx={2.2} fill="#000" opacity={0.35} filter="url(#tc-soft)" />
-      <rect x={0} y={0} width={W} height={H} rx={board.family === "bcm2711" ? 3 : 1.6} fill={`url(#pcb-${board.id})`} stroke={shade(board.pcbColor, 35)} strokeWidth={0.3} />
+      {!silk && <rect x={0.6} y={1.4} width={W} height={H} rx={2.2} fill="#000" opacity={0.35} filter="url(#tc-soft)" />}
+      {silk ? (
+        <path d={pcbOutline(W, H, board.family === "bcm2711" ? 3 : 1.6, board.holes)} fillRule="evenodd" fill={`url(#pcb-${board.id})`} />
+      ) : (
+        <rect x={0} y={0} width={W} height={H} rx={board.family === "bcm2711" ? 3 : 1.6} fill={`url(#pcb-${board.id})`} stroke={shade(board.pcbColor, 35)} strokeWidth={0.3} />
+      )}
       {/* fine traces for texture */}
       <g opacity={0.16} stroke={shade(board.pcbColor, 60)} strokeWidth={0.25} fill="none">
         {Array.from({ length: 7 }, (_, i) => (
           <path key={i} d={`M ${W * 0.18 + i * 3.2} ${H * 0.25} v ${H * 0.18} l 3 3 h ${W * 0.12}`} />
         ))}
       </g>
-      {board.holes.map((h, i) => (
-        <g key={i}>
-          <circle cx={h.x} cy={h.y} r={h.d / 2 + 0.9} fill="#c8a044" />
-          <circle cx={h.x} cy={h.y} r={h.d / 2} fill="#0b0f0d" />
-        </g>
-      ))}
-      {board.chips.map((c, i) => (
+      {board.holes.map((h, i) =>
+        silk ? (
+          <circle key={i} cx={h.x} cy={h.y} r={h.d / 2 + 0.45} fill="none" stroke="#c8a044" strokeWidth={0.9} />
+        ) : (
+          <g key={i}>
+            <circle cx={h.x} cy={h.y} r={h.d / 2 + 0.9} fill="#c8a044" />
+            <circle cx={h.x} cy={h.y} r={h.d / 2} fill="#0b0f0d" />
+          </g>
+        ),
+      )}
+      {!silk && board.chips.map((c, i) => (
         <g key={i}>
           <rect x={c.x + 0.3} y={c.y + 0.5} width={c.w} height={c.h} rx={0.5} fill="#000" opacity={0.3} />
           <rect x={c.x} y={c.y} width={c.w} height={c.h} rx={c.metal ? 0.6 : 0.4} fill={c.metal ? "url(#tc-metal)" : c.color} stroke={c.metal ? "#8c959d" : "#000"} strokeWidth={0.2} />
@@ -170,15 +181,22 @@ export const Board2D = memo(function Board2D({
           )}
         </g>
       ))}
-      {board.connectors.map((c) => (
-        <ConnectorShape key={c.id} c={c} />
-      ))}
-      {strips.map((s, i) => (
-        <rect key={i} x={s.x} y={s.y} width={s.w} height={s.h} rx={0.3} fill="#131416" stroke="#050505" strokeWidth={0.15} />
-      ))}
-      {board.pins.map((p) => (
-        <rect key={p.id} x={p.x - 0.42} y={p.y - 0.42} width={0.84} height={0.84} fill="url(#tc-gold)" />
-      ))}
+      {board.connectors
+        .filter((c) => !silk || c.kind === "antenna")
+        .map((c) => (
+          <ConnectorShape key={c.id} c={c} />
+        ))}
+      {!silk &&
+        strips.map((s, i) => (
+          <rect key={i} x={s.x} y={s.y} width={s.w} height={s.h} rx={0.3} fill="#131416" stroke="#050505" strokeWidth={0.15} />
+        ))}
+      {board.pins.map((p) =>
+        silk ? (
+          <circle key={p.id} cx={p.x} cy={p.y} r={0.62} fill="none" stroke="url(#tc-gold)" strokeWidth={0.5} />
+        ) : (
+          <rect key={p.id} x={p.x - 0.42} y={p.y - 0.42} width={0.84} height={0.84} fill="url(#tc-gold)" />
+        ),
+      )}
       {showLabels &&
         board.pins.map((p) => {
           const top = edgeY(p) === "top";
@@ -233,6 +251,16 @@ function StatusLed({ x, y, color, on, label }: { x: number; y: number; color: st
       </text>
     </g>
   );
+}
+
+/** Rounded board outline with circular cut-outs (even-odd fill). */
+function pcbOutline(W: number, H: number, r: number, holes: { x: number; y: number; d: number }[]) {
+  let d = `M ${r} 0 H ${W - r} A ${r} ${r} 0 0 1 ${W} ${r} V ${H - r} A ${r} ${r} 0 0 1 ${W - r} ${H} H ${r} A ${r} ${r} 0 0 1 0 ${H - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+  for (const h of holes) {
+    const hr = h.d / 2;
+    d += ` M ${h.x - hr} ${h.y} a ${hr} ${hr} 0 1 0 ${hr * 2} 0 a ${hr} ${hr} 0 1 0 ${-hr * 2} 0 Z`;
+  }
+  return d;
 }
 
 /** Shared SVG defs (gradients, glows). Render once inside every canvas <svg>. */

@@ -1,15 +1,16 @@
 import { ContactShadows, OrbitControls, RoundedBox } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { type ReactElement, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactElement, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { getBoard } from "../core/boards";
-import { endpointPos, instBounds, isBoard } from "../core/circuit";
+import { buildTopology, endpointPos, footprintOf, instBounds, isBoard, isHost } from "../core/circuit";
 import { getScenario, vibAccel } from "../core/env";
 import { getPart, LED_HEX, type PartLive } from "../core/parts";
 import { engine } from "../core/sim";
 import type { BoardDef, PartInstance } from "../core/types";
 import { useStudio } from "../store";
 import { SCENARIO_ICON } from "./EnvPanel";
+import { BoardModel, computeStack, HostModel } from "./three/models";
 
 const S = 0.1; // 1 unit = 10 mm
 
@@ -34,78 +35,25 @@ function useCenter() {
 const live = () => useStudio.getState().snap;
 
 // ---------------------------------------------------------------- board
-function Board3D({ board, inst }: { board: BoardDef; inst: PartInstance }) {
+function BoardLive({ board, inst, lift }: { board: BoardDef; inst: PartInstance; lift: number }) {
   const running = useStudio((s) => s.sim.running);
   const ledOn = useStudio((s) => {
     const id = board.builtinLed ?? (board.family === "rp2040" ? "LED" : "");
     return !!s.snap?.drives[id]?.level;
   });
-  const t = board.thickness * S;
   return (
-    <group position={[inst.x * S, 0, inst.y * S]}>
-      <RoundedBox args={[board.width * S, t, board.height * S]} radius={0.04} position={[(board.width * S) / 2, t / 2, (board.height * S) / 2]} castShadow receiveShadow>
-        <meshStandardMaterial color={board.pcbColor} roughness={0.55} metalness={0.1} />
-      </RoundedBox>
-      {board.chips.map((c, i) => (
-        <mesh key={i} position={[(c.x + c.w / 2) * S, t + (c.z * S) / 2, (c.y + c.h / 2) * S]} castShadow>
-          <boxGeometry args={[c.w * S, Math.max(0.02, c.z * S), c.h * S]} />
-          <meshStandardMaterial color={c.metal ? "#c2c8ce" : c.color} metalness={c.metal ? 0.85 : 0.1} roughness={c.metal ? 0.3 : 0.6} />
-        </mesh>
-      ))}
-      {board.connectors
-        .filter((c) => c.kind !== "antenna" && c.z > 0)
-        .map((c) => (
-          <mesh key={c.id} position={[(c.x + c.w / 2) * S, t + (c.z * S) / 2, (c.y + c.h / 2) * S]} castShadow>
-            <boxGeometry args={[c.w * S, c.z * S, c.h * S]} />
-            <meshStandardMaterial color={c.kind === "barrel" || c.kind === "audio" ? "#151618" : "#c9ced3"} metalness={c.kind === "barrel" ? 0.1 : 0.9} roughness={0.3} />
-          </mesh>
-        ))}
-      {board.pins.map((p) => (
-        <group key={p.id} position={[p.x * S, t, p.y * S]}>
-          <mesh position={[0, 0.125, 0]}>
-            <boxGeometry args={[0.25, 0.25, 0.25]} />
-            <meshStandardMaterial color="#161719" roughness={0.8} />
-          </mesh>
-          <mesh position={[0, 0.3, 0]}>
-            <boxGeometry args={[0.064, 0.45, 0.064]} />
-            <meshStandardMaterial color="#d8ad45" metalness={0.9} roughness={0.25} />
-          </mesh>
-        </group>
-      ))}
-      <mesh position={[(board.family === "avr" ? 52 : 10.8) * S, t + 0.02, (board.family === "avr" ? 20 : 5.2) * S]}>
-        <boxGeometry args={[0.16, 0.06, 0.1]} />
-        <meshStandardMaterial color="#ff3b30" emissive="#ff3b30" emissiveIntensity={running ? 3 : 0} />
-      </mesh>
-      <mesh position={[(board.family === "avr" ? 52 : board.family === "rp2040" ? 6.2 : 10.8) * S, t + 0.02, (board.family === "avr" ? 23.6 : board.family === "rp2040" ? 16.6 : 22.6) * S]}>
-        <boxGeometry args={[0.16, 0.06, 0.1]} />
-        <meshStandardMaterial color="#3b8cff" emissive="#3b8cff" emissiveIntensity={ledOn ? 4 : 0} />
-      </mesh>
-      <SilkLabel text={board.family === "avr" ? "UNO R3" : board.short} color={board.silkColor} position={[board.width * S * 0.42, t + 0.006, board.height * S * 0.56]} width={board.family === "avr" ? 2.2 : 1.1} />
-    </group>
+    <Placed inst={inst} w={board.width} h={board.height} lift={lift}>
+      <BoardModel board={board} powered={running} ledOn={ledOn} />
+    </Placed>
   );
 }
 
-/** Silkscreen text as a canvas texture (no web-font download needed). */
-function SilkLabel({ text, color, position, width }: { text: string; color: string; position: [number, number, number]; width: number }) {
-  const tex = useMemo(() => {
-    const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 128;
-    const g = c.getContext("2d")!;
-    g.fillStyle = color;
-    g.font = "700 84px Chakra Petch, sans-serif";
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.fillText(text, 256, 68);
-    const t = new THREE.CanvasTexture(c);
-    t.anisotropy = 4;
-    return t;
-  }, [text, color]);
+/** Positions a mm-unit model (origin top-left) at an instance, rotating about its centre. */
+function Placed({ inst, w, h, lift, children }: { inst: PartInstance; w: number; h: number; lift: number; children: ReactNode }) {
   return (
-    <mesh position={position} rotation={[-Math.PI / 2, 0, 0]}>
-      <planeGeometry args={[width, width / 4]} />
-      <meshBasicMaterial map={tex} transparent depthWrite={false} />
-    </mesh>
+    <group position={[(inst.x + w / 2) * S, lift * S, (inst.y + h / 2) * S]} rotation={[0, -THREE.MathUtils.degToRad(inst.rot ?? 0), 0]} scale={S}>
+      <group position={[-w / 2, 0, -h / 2]}>{children}</group>
+    </group>
   );
 }
 
@@ -134,7 +82,7 @@ function LcdScreen({ lines, lit }: { lines: string[]; lit: boolean }) {
   );
 }
 
-function Part3D({ inst }: { inst: PartInstance }) {
+export function Part3D({ inst, lift = 0 }: { inst: PartInstance; lift?: number }) {
   const def = getPart(inst.type);
   const lv = useStudio((s) => s.snap?.live[inst.id]) as PartLive | undefined;
   const horn = useRef<THREE.Group>(null);
@@ -287,14 +235,6 @@ function Part3D({ inst }: { inst: PartInstance }) {
         </group>
       );
       break;
-    case "breadboard":
-      body = (
-        <mesh position={[0, 0.42, 0]} receiveShadow castShadow>
-          <boxGeometry args={[w, 0.85, h]} />
-          <meshStandardMaterial color="#efece2" roughness={0.85} />
-        </mesh>
-      );
-      break;
     case "pir":
       body = (
         <group>
@@ -390,22 +330,23 @@ function Part3D({ inst }: { inst: PartInstance }) {
     }
   }
   return (
-    <group position={[(inst.x + cx) * S, 0, (inst.y + cy) * S]} rotation={[0, rot, 0]}>
+    <group position={[(inst.x + cx) * S, lift * S, (inst.y + cy) * S]} rotation={[0, rot, 0]}>
       {body}
     </group>
   );
 }
 
-function Wires3D() {
+export function Wires3D({ pinTop, only }: { pinTop: (part: string) => number; only?: Set<string> }) {
   const project = useStudio((s) => s.project);
   const tubes = useMemo(() => {
     return project.wires
+      .filter((w) => !only || (only.has(w.from.part) && only.has(w.to.part)))
       .map((w) => {
         const a = endpointPos(project.parts, w.from.part, w.from.pin);
         const b = endpointPos(project.parts, w.to.part, w.to.pin);
         if (!a || !b) return null;
-        const ha = project.parts.find((p) => p.id === w.from.part)?.type === "breadboard" ? 0.86 : 0.55;
-        const hb = project.parts.find((p) => p.id === w.to.part)?.type === "breadboard" ? 0.86 : 0.55;
+        const ha = pinTop(w.from.part) * S;
+        const hb = pinTop(w.to.part) * S;
         const d = Math.hypot(b.x - a.x, b.y - a.y) * S;
         const lift = 0.6 + d * 0.18;
         const pts = [
@@ -418,7 +359,7 @@ function Wires3D() {
         return { id: w.id, color: w.color, geo: new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.045, 8, false) };
       })
       .filter(Boolean) as { id: string; color: string; geo: THREE.TubeGeometry }[];
-  }, [project.wires, project.parts]);
+  }, [project.wires, project.parts, pinTop, only]);
   return (
     <group>
       {tubes.map((t) => (
@@ -621,14 +562,38 @@ function Rig({ span }: { span: number }) {
   );
 }
 
+export function useStack(parts: PartInstance[], board: BoardDef) {
+  return useMemo(() => {
+    const topo = buildTopology(board, parts, [], new Map());
+    return computeStack(parts, topo.inserted, board);
+  }, [parts, board]);
+}
+
+/** One placed instance in 3D: board, breadboard/perfboard host, or component. */
+export function Instance3D({ inst, board, lift }: { inst: PartInstance; board: BoardDef; lift: number }) {
+  if (isBoard(inst)) return <BoardLive board={board} inst={inst} lift={lift} />;
+  if (isHost(inst)) {
+    const fp = footprintOf(inst)!;
+    return (
+      <Placed inst={inst} w={fp.w} h={fp.h} lift={lift}>
+        <HostModel inst={inst} />
+      </Placed>
+    );
+  }
+  return <Part3D inst={inst} lift={lift} />;
+}
+
 function Circuit3D() {
   const project = useStudio((s) => s.project);
   const board = getBoard(project.boardId);
   const c = useCenter();
+  const stack = useStack(project.parts, board);
   return (
     <group position={[-c.cx * S, 0, -c.cy * S]}>
-      {project.parts.map((p) => (isBoard(p) ? <Board3D key={p.id} board={board} inst={p} /> : <Part3D key={p.id} inst={p} />))}
-      <Wires3D />
+      {project.parts.map((p) => (
+        <Instance3D key={p.id} inst={p} board={board} lift={stack.lift.get(p.id) ?? 0} />
+      ))}
+      <Wires3D pinTop={stack.pinTop} />
     </group>
   );
 }

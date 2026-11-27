@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { getBoard } from "./core/boards";
-import { BOARD_ID, isBoard } from "./core/circuit";
+import { BOARD_ID, buildTopology, instBounds, isBoard, isHost } from "./core/circuit";
 import { defaultScenarioState } from "./core/env";
 import { customSensorToPart, getPart, registerPart } from "./core/parts";
 import { engine, type SerialLine, type SimSnapshot } from "./core/sim";
@@ -102,7 +102,12 @@ interface State {
   mqttStatus: "offline" | "connecting" | "online" | "error";
   caseParams: CaseParams;
   wireColor: string | null;
-  modal: null | "custom-sensor" | "scan" | "drawing" | "projects" | "export";
+  modal: null | "custom-sensor" | "scan" | "drawing" | "projects" | "export" | "viewer3d";
+  /** Instance shown in the 3D viewer (null = whole circuit). */
+  viewerFocus: string | null;
+  /** Bumped on every select() call, even when the selection is unchanged (re-opens the inspector). */
+  selKey: number;
+  openViewer(id: string | null): void;
   burst: { x: number; y: number; t: number } | null;
 
   commit(fn: (p: Project) => Project, history?: boolean): void;
@@ -174,6 +179,9 @@ export const useStudio = create<State>((set, get) => ({
   caseParams: DEFAULT_CASE,
   wireColor: null,
   modal: null,
+  viewerFocus: null,
+  selKey: 0,
+  openViewer: (id) => set({ viewerFocus: id, modal: "viewer3d" }),
   burst: null,
 
   set: (k, v) => set({ [k]: v } as Partial<State>),
@@ -267,24 +275,41 @@ export const useStudio = create<State>((set, get) => ({
   },
   mountBoard: (kind) => {
     const st = get();
-    const boardInst = st.project.parts.find(isBoard);
+    let boardInst = st.project.parts.find(isBoard);
     if (!boardInst) return;
-    const plan = planMount(boardInst, kind);
+    // Already plugged in somewhere? Replace that host if nothing else uses it.
+    const topo = buildTopology(getBoard(st.project.boardId), st.project.parts, [], new Map());
+    const curHost = topo.inserted.find((i) => i.part === boardInst!.id)?.bb;
+    const dropHost = curHost && !topo.inserted.some((i) => i.bb === curHost && i.part !== boardInst!.id) ? curHost : null;
+    let plan = planMount(boardInst, kind);
     if (!plan.ok || !plan.host || !plan.board) {
       st.toast(plan.reason ?? "This board can't be mounted", "warn");
       return;
+    }
+    // The new host must not land on another breadboard/perfboard — slide the board to free space below.
+    const others = st.project.parts.filter((p) => p.id !== boardInst!.id && p.id !== dropHost);
+    const hostRect = (pl: typeof plan) => {
+      const L = getPart(pl.host!.type)!.layout!(pl.host!.props);
+      return { x: pl.host!.x, y: pl.host!.y, w: L.w, h: L.h };
+    };
+    const hit = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    if (others.filter(isHost).some((h) => hit(instBounds(h), hostRect(plan)))) {
+      const maxY = Math.max(...others.map((p) => instBounds(p)).map((b) => b.y + b.h));
+      boardInst = { ...boardInst, y: snap(maxY + 25) };
+      plan = planMount(boardInst, kind);
+      if (!plan.ok || !plan.host || !plan.board) return;
     }
     const hostId = newId("u");
     const def = getPart(plan.host.type)!;
     st.commit((p) => ({
       ...p,
       parts: [
+        ...p.parts.filter((q) => q.id !== dropHost).map((q) => (isBoard(q) ? { ...q, x: plan.board!.x, y: plan.board!.y, rot: 0 as const } : q)),
         { id: hostId, type: plan.host!.type, label: nextLabel(p.parts, labelPrefix(def)), x: plan.host!.x, y: plan.host!.y, rot: 0, props: { ...Object.fromEntries(def.props.map((s) => [s.key, s.default])), ...plan.host!.props } },
-        ...p.parts.map((q) => (isBoard(q) ? { ...q, x: plan.board!.x, y: plan.board!.y, rot: 0 as const } : q)),
       ],
     }));
-    set({ selection: [hostId] });
-    st.toast(`Mounted ${plan.summary}`, "ok");
+    set((s) => ({ selection: [hostId], selKey: s.selKey + 1 }));
+    st.toast(`Mounted ${plan.summary}${dropHost ? " (replaced the old one)" : ""}`, "ok");
     setTimeout(() => window.dispatchEvent(new Event("tconnect:fit")), 50);
   },
   setLabel: (id, label) => get().commit((p) => ({ ...p, parts: p.parts.map((q) => (q.id === id ? { ...q, label } : q)) })),
@@ -344,7 +369,7 @@ export const useStudio = create<State>((set, get) => ({
     set({ selection: [], selectedWire: null, dockTab: "code", dockOpen: true });
     return inst.log;
   },
-  select: (ids, wire = null) => set({ selection: ids, selectedWire: wire }),
+  select: (ids, wire = null) => set((s) => ({ selection: ids, selectedWire: wire, selKey: s.selKey + 1 })),
 
   startSim: async () => {
     const { project } = get();

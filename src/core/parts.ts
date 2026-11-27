@@ -107,6 +107,11 @@ export const LED_HEX: Record<string, string> = {
 };
 
 export const BB_ROWS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+const layoutCache = new Map<string, PartLayout>();
+const num = (v: unknown, d: number, lo: number, hi: number) => {
+  const n = Math.round(Number(v ?? d));
+  return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
+};
 
 const powered = (c: StampCtx, vcc: string, gnd: string, min: number) => c.supply(vcc, gnd) >= min;
 
@@ -764,11 +769,6 @@ function servoPost(c: PostCtx, secPer60: number): PartLive {
   return { angle: next, powered: s > 3, reading: next, readingUnit: "°", warn };
 }
 
-const layoutCache = new Map<string, PartLayout>();
-const num = (v: unknown, d: number, lo: number, hi: number) => {
-  const n = Math.round(Number(v ?? d));
-  return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
-};
 
 /** Breadboard geometry: rows a–e and f–j either side of a 3-pitch channel, optional ± rails. */
 export function layoutBreadboard(props: Record<string, unknown>): PartLayout {

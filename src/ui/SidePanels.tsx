@@ -1,7 +1,8 @@
-import { Plus, RotateCw, Search, Trash2, Wand2, Copy, Ruler } from "lucide-react";
+import { Plus, RotateCw, Search, Trash2, Wand2, Copy, Ruler, Box, Grid3x3, Rows3 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { BOARDS, getBoard } from "../core/boards";
-import { BOARD_ID, isBoard } from "../core/circuit";
+import { BOARD_ID, buildTopology, footprintOf, isBoard } from "../core/circuit";
+import { planMount } from "../core/mount";
 import { allParts, getPart, type PartDef } from "../core/parts";
 import { engine } from "../core/sim";
 import type { PartCategory } from "../core/types";
@@ -188,9 +189,16 @@ export function Inspector() {
             <li key={n}>{n}</li>
           ))}
         </ul>
-        <button className="btn" onClick={() => st.set("modal", "drawing")}>
-          <Ruler size={15} /> Dimension drawing
-        </button>
+        <h3 className="group-title">Mount</h3>
+        <MountButtons inst={inst} />
+        <div className="row">
+          <button className="btn primary" onClick={() => st.openViewer(inst.id)}>
+            <Box size={15} /> View in 3D
+          </button>
+          <button className="btn" onClick={() => st.set("modal", "drawing")}>
+            <Ruler size={15} /> Dimension drawing
+          </button>
+        </div>
       </div>
     );
   }
@@ -272,7 +280,8 @@ export function Inspector() {
           {live.warn && <p className="warn-text">{live.warn}</p>}
         </div>
       )}
-      <h3 className="group-title">Pins</h3>
+      {def.host && <HostSummary inst={inst} />}
+      {!def.host && <h3 className="group-title">Pins</h3>}
       <ul className="pin-list">
         {def.pins
           .filter(() => !def.host)
@@ -289,7 +298,10 @@ export function Inspector() {
           })}
       </ul>
       <div className="row">
-        <button
+        <button className="btn" onClick={() => st.openViewer(inst.id)}>
+          <Box size={15} /> 3D
+        </button>
+        {!def.host && <button
           className="btn primary"
           onClick={() => {
             const r = autoWirePart(st.project, inst.id);
@@ -298,7 +310,7 @@ export function Inspector() {
           }}
         >
           <Wand2 size={15} /> Auto-wire
-        </button>
+        </button>}
         <button className="btn icon" onClick={() => st.rotateSelection()} aria-label="Rotate">
           <RotateCw size={15} />
         </button>
@@ -309,6 +321,69 @@ export function Inspector() {
           <Trash2 size={15} />
         </button>
       </div>
+    </div>
+  );
+}
+
+/** "Mount on breadboard / perfboard" — refused boards explain why. */
+function MountButtons({ inst }: { inst: import("../core/types").PartInstance }) {
+  const st = useStudio.getState();
+  const bb = useMemo(() => planMount(inst, "breadboard"), [inst]);
+  const pf = useMemo(() => planMount(inst, "perfboard"), [inst]);
+  return (
+    <div className="mount">
+      <div className="row">
+        <button className="btn" disabled={!bb.ok} title={bb.ok ? bb.summary : bb.reason} onClick={() => st.mountBoard("breadboard")}>
+          <Rows3 size={15} /> Breadboard
+        </button>
+        <button className="btn" disabled={!pf.ok} title={pf.ok ? pf.summary : pf.reason} onClick={() => st.mountBoard("perfboard")}>
+          <Grid3x3 size={15} /> Perfboard
+        </button>
+      </div>
+      <p className="muted small">{bb.ok ? "Plugs the headers straight into the holes — the host is sized to fit and every pin becomes a connected strip or pad." : bb.reason}</p>
+    </div>
+  );
+}
+
+/** Size + occupancy readout for a breadboard / perfboard. */
+function HostSummary({ inst }: { inst: import("../core/types").PartInstance }) {
+  const project = useStudio((s) => s.project);
+  const used = useMemo(() => {
+    const topo = buildTopology(getBoard(project.boardId), project.parts, [], new Map());
+    const holes = new Set(topo.inserted.filter((i) => i.bb === inst.id).map((i) => i.hole));
+    const parts = new Set(topo.inserted.filter((i) => i.bb === inst.id).map((i) => i.part));
+    return { holes: holes.size, parts: [...parts].map((id) => project.parts.find((p) => p.id === id)).filter(Boolean) };
+  }, [project, inst.id]);
+  const fp = footprintOf(inst)!;
+  const cols = Number(inst.props.cols ?? (inst.type === "perfboard" ? 24 : 30));
+  const rows = Number(inst.props.rows ?? 18);
+  const total = fp.pins.length;
+  return (
+    <div className="host-sum">
+      <div className="host-grid">
+        <div>
+          <span>{inst.type === "perfboard" ? "Holes" : "Columns"}</span>
+          <strong>{inst.type === "perfboard" ? `${cols} × ${rows}` : cols}</strong>
+        </div>
+        <div>
+          <span>Size</span>
+          <strong>
+            {fp.w.toFixed(1)} × {fp.h.toFixed(1)} mm
+          </strong>
+        </div>
+        <div>
+          <span>In use</span>
+          <strong>
+            {used.holes}/{total}
+          </strong>
+        </div>
+      </div>
+      {used.parts.length > 0 && (
+        <p className="muted small">
+          Mounted: {used.parts.map((p) => (isBoard(p!) ? getBoard(project.boardId).short : p!.label)).join(", ")}
+        </p>
+      )}
+      {!used.parts.length && <p className="muted small">Drop parts so their pins land on the holes — or select the board and press Mount.</p>}
     </div>
   );
 }

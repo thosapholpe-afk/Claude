@@ -58,7 +58,7 @@ export function planMount(boardInst: PartInstance, kind: "breadboard" | "perfboa
         best = r1;
       }
     }
-    if (best < 0) return { ok: false, reason: `${board.short}'s header rows are ${spanR} holes apart — too ${spanR < 7 ? "close; both rows would land in the same connected strips" : "far apart for a breadboard"}.` };
+    if (best < 0) return { ok: false, reason: `${board.short}'s header rows are ${spanR} ${spanR === 1 ? "hole" : "holes"} apart — too ${spanR < 7 ? "close; both rows would land in the same connected strips" : "far apart for a breadboard"}.` };
     const r2 = [5, 6, 7, 8, 9].find((i) => yIdx(i) === yIdx(best) + spanR)!;
     const cols = Math.max(30, nCols + 4);
     const c0 = Math.floor((cols - nCols) / 2) + 1;
