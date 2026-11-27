@@ -1,6 +1,6 @@
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { installRipples } from "./lib/fx";
+import { installRipples, installTilt } from "./lib/fx";
 import { useStudio } from "./store";
 import { Editor } from "./ui/App";
 import { Landing, Onboarding, startLocal, useAuth } from "./ui/Auth";
@@ -9,6 +9,7 @@ import "./styles.css";
 
 loadCustomBoards();
 installRipples();
+installTilt();
 
 function Root() {
   const { me, user } = useAuth();

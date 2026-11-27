@@ -5,6 +5,7 @@ import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import CodeMirror from "@uiw/react-codemirror";
 import { AlertTriangle, ChevronDown, ChevronUp, CircleAlert, Code2, Eraser, Info, LineChart, Radio, Send, TerminalSquare } from "lucide-react";
+import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getBoard } from "../core/boards";
 import { engine, type MqttMessage } from "../core/sim";
@@ -244,6 +245,7 @@ export function Dock() {
               set("dockOpen", true);
             }}
           >
+            {tab === tb.id && open && <motion.span layoutId="dock-ind" className="dock-ind" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
             <tb.icon size={15} />
             <span>{tb.label}</span>
             {tb.id === "diag" && diagCount > 0 && <b className="badge warn">{diagCount}</b>}

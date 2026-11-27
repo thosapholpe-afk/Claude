@@ -29,7 +29,9 @@ import {
   Spline,
   Gauge,
 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Brand } from "./Logo";
 import { runWireCommand } from "../core/wiring";
 import { click, isMuted, setMuted, setTone, stopAll, stopTone } from "../lib/audio";
 import { useStudio, type LeftTab } from "../store";
@@ -54,16 +56,6 @@ const RAIL: { id: LeftTab; label: string; icon: typeof Cpu }[] = [
   { id: "case", label: "Case", icon: Box },
   { id: "drawing", label: "Drawing", icon: Ruler },
 ];
-
-function Logo() {
-  return (
-    <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden>
-      <rect width="32" height="32" rx="8" fill="#393d47" />
-      <path d="M8 9l6.5 7L8 23M24 9l-6.5 7L24 23" stroke="#ced9e5" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="16" cy="16" r="1.7" fill="#ced9e5" />
-    </svg>
-  );
-}
 
 function SimClock() {
   const t = useStudio((s) => s.snap?.t ?? 0);
@@ -92,10 +84,7 @@ function TopBar() {
   const [menu, setMenu] = useState(false);
   return (
     <header className="topbar">
-      <div className="brand">
-        <Logo />
-        <span className="wordmark">Thosaphol Connect</span>
-      </div>
+      <Brand size={30} />
       <input className="proj-name" value={project.name} onChange={(e) => st.commit((p) => ({ ...p, name: e.target.value }), false)} aria-label="Project name" />
       <span className="saved muted small">Saved locally</span>
       <span className="spacer" />
@@ -103,12 +92,17 @@ function TopBar() {
         <FolderOpen size={16} /> <span className="hide-sm">Saved works</span>
       </button>
       <div className="seg view-seg" role="tablist" aria-label="View">
-        <button role="tab" aria-selected={view === "2d"} className={view === "2d" ? "on" : ""} onClick={() => st.set("view", "2d")}>
-          <Cable size={15} /> 2D
-        </button>
-        <button role="tab" aria-selected={view === "3d"} className={view === "3d" ? "on" : ""} onClick={() => st.set("view", "3d")}>
-          <Orbit size={15} /> 3D twin
-        </button>
+        {(
+          [
+            ["2d", "2D", Cable],
+            ["3d", "3D twin", Orbit],
+          ] as const
+        ).map(([id, label, Icon]) => (
+          <button key={id} role="tab" aria-selected={view === id} className={view === id ? "on" : ""} onClick={() => st.set("view", id)}>
+            {view === id && <motion.span layoutId="view-pill" className="seg-pill" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+            <Icon size={15} /> {label}
+          </button>
+        ))}
       </div>
       {running && (
         <div className="sim-ctl">
@@ -296,11 +290,22 @@ function Toasts() {
   const drop = useStudio((s) => s.dropToast);
   return (
     <div className="toasts" role="status" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast ${t.kind}`} onClick={() => drop(t.id)}>
-          {t.text}
-        </div>
-      ))}
+      <AnimatePresence initial={false}>
+        {toasts.map((t) => (
+          <motion.div
+            key={t.id}
+            layout
+            className={`toast ${t.kind}`}
+            onClick={() => drop(t.id)}
+            initial={{ opacity: 0, y: 24, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 60, transition: { duration: 0.2 } }}
+            transition={{ type: "spring", stiffness: 380, damping: 28 }}
+          >
+            {t.text}
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -365,14 +370,23 @@ export function Editor() {
       <div className={`workspace ${leftTab ? "" : "no-drawer"}`}>
         <nav className="rail" aria-label="Tools">
           {RAIL.map((r) => (
-            <button key={r.id} className={leftTab === r.id ? "on" : ""} onClick={() => set("leftTab", leftTab === r.id ? null : r.id)} aria-pressed={leftTab === r.id} title={r.label}>
+            <motion.button key={r.id} className={leftTab === r.id ? "on" : ""} onClick={() => set("leftTab", leftTab === r.id ? null : r.id)} aria-pressed={leftTab === r.id} title={r.label} whileHover={{ y: -2 }} whileTap={{ scale: 0.9 }}>
+              {leftTab === r.id && <motion.span layoutId="rail-pill" className="rail-pill" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
               <r.icon size={19} />
               <span>{r.label}</span>
-            </button>
+            </motion.button>
           ))}
         </nav>
+        <AnimatePresence mode="wait" initial={false}>
         {leftTab && leftTab !== "parts" && leftTab !== "custom" && (
-          <aside className="drawer" key={leftTab}>
+          <motion.aside
+            className="drawer"
+            key={leftTab}
+            initial={{ opacity: 0, x: -24, filter: "blur(6px)" }}
+            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, x: -16, filter: "blur(4px)", transition: { duration: 0.14 } }}
+            transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}
+          >
             {leftTab === "templates" && <TemplatesPanel />}
             {leftTab === "ai" && <AIChat />}
             {leftTab === "env" && <EnvPanel />}
@@ -383,8 +397,9 @@ export function Editor() {
               </Suspense>
             )}
             {leftTab === "drawing" && <DrawingPanel />}
-          </aside>
+          </motion.aside>
         )}
+        </AnimatePresence>
         <main className="center">
           <div className="stage">
             <Suspense fallback={<Loading />}>{stage}</Suspense>
@@ -392,16 +407,20 @@ export function Editor() {
           <Dock />
         </main>
         <aside className="right">
-          {hasSel && rightTab === "auto" ? (
-            <>
-              <button className="btn ghost back-to-parts" onClick={() => setRightTab("parts")}>
-                ← Components
-              </button>
-              <Inspector />
-            </>
-          ) : (
-            <PartsPanel />
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {hasSel && rightTab === "auto" ? (
+              <motion.div key="inspector" className="right-inner" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.12 } }} transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}>
+                <button className="btn ghost back-to-parts" onClick={() => setRightTab("parts")}>
+                  ← Components
+                </button>
+                <Inspector />
+              </motion.div>
+            ) : (
+              <motion.div key="parts" className="right-inner" initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24, transition: { duration: 0.12 } }} transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}>
+                <PartsPanel />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </aside>
       </div>
       {modal === "custom-sensor" && <CustomSensorModal />}

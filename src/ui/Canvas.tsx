@@ -318,7 +318,7 @@ export function Canvas() {
         <path d={d} stroke="rgba(0,0,0,.55)" strokeWidth={1.25} fill="none" strokeLinecap="round" />
         <path d={d} stroke={w.color} strokeWidth={0.85} fill="none" strokeLinecap="round" />
         <path d={d} stroke="#fff" strokeWidth={0.22} fill="none" opacity={0.28} strokeLinecap="round" transform="translate(-0.18 -0.18)" />
-        {live && <path d={d} className="flow" stroke={v > 4 ? "#e6d1a6" : "var(--accent)"} strokeWidth={0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
+        {live && <path d={d} className="flow" stroke={v > 4 ? "#f5b0a3" : "#e8d4a2"} strokeWidth={0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
         <circle cx={a.x} cy={a.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
         <circle cx={b.x} cy={b.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
       </g>

@@ -147,19 +147,19 @@ export function CasePreview() {
   return (
     <div className="twin3d case-stage">
       <Canvas shadows camera={{ position: [res.outer.w * S * 1.4, res.outer.w * S * 1.1, res.outer.d * S * 1.8], fov: 38 }}>
-        <color attach="background" args={[getComputedStyle(document.documentElement).getPropertyValue("--stage-bg").trim() || "#121a22"]} />
+        <color attach="background" args={[getComputedStyle(document.documentElement).getPropertyValue("--stage-bg").trim() || "#262629"]} />
         <ambientLight intensity={0.5} />
         <directionalLight position={[6, 10, 5]} intensity={2.4} castShadow />
         <directionalLight position={[-6, 4, -5]} intensity={0.6} />
         <group scale={S}>
           <mesh geometry={res.base} castShadow receiveShadow>
-            <meshStandardMaterial color="#484b5d" roughness={0.78} metalness={0.05} />
+            <meshStandardMaterial color="#3e3e44" roughness={0.78} metalness={0.05} />
           </mesh>
           <mesh geometry={res.lid} position={[0, res.outer.h + (explode ? 18 : 0.01), 0]} castShadow>
-            <meshStandardMaterial color="#ced9e5" roughness={0.7} transparent opacity={0.94} />
+            <meshStandardMaterial color="#efe3c8" roughness={0.7} transparent opacity={0.95} />
           </mesh>
         </group>
-        <Grid args={[40, 40]} cellSize={0.5} sectionSize={2.5} position={[0, -0.01, 0]} cellColor="#242c37" sectionColor="#484b5d" fadeDistance={30} infiniteGrid />
+        <Grid args={[40, 40]} cellSize={0.5} sectionSize={2.5} position={[0, -0.01, 0]} cellColor="#333338" sectionColor="#5a5a61" fadeDistance={30} infiniteGrid />
         <OrbitControls makeDefault enableDamping />
       </Canvas>
       <div className="twin-hud">

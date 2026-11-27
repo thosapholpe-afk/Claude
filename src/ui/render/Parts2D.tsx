@@ -422,7 +422,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           {[7.92, 13, 18.08].map((y) => (
             <circle key={y} cx={45} cy={y} r={1.6} fill="url(#tc-metal)" />
           ))}
-          <g stroke={on ? "#ced9e5" : "#8b93a1"} strokeWidth={0.5} fill="none" opacity={0.8}>
+          <g stroke={on ? "#bcd9a2" : "#8b93a1"} strokeWidth={0.5} fill="none" opacity={0.8}>
             <path d={on ? "M37 13 L40 8.2" : "M37 13 L40 17.8"} />
           </g>
           <IndicatorLed x={8} y={6} on={!!L.powered} />
@@ -443,7 +443,7 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
           <circle cx={19.5} cy={10} r={9.5} fill="url(#tc-metal)" stroke="#7d8790" strokeWidth={0.3} />
           <g transform={`rotate(${rot} 19.5 10)`} opacity={0.9}>
             {[0, 120, 240].map((a) => (
-              <path key={a} transform={`rotate(${a} 19.5 10)`} d="M19.5 10 C 21 6, 24 3.5, 22.5 1.5 C 20 2, 18.6 6, 19.5 10 Z" fill="#ced9e5" opacity={0.55} />
+              <path key={a} transform={`rotate(${a} 19.5 10)`} d="M19.5 10 C 21 6, 24 3.5, 22.5 1.5 C 20 2, 18.6 6, 19.5 10 Z" fill="#f5b0a3" opacity={0.55} />
             ))}
             <circle cx={19.5} cy={10} r={1.5} fill="#333" />
           </g>

@@ -32,10 +32,10 @@ export function EnvPanel() {
       </div>
       <p className="muted small">Put the circuit somewhere: the environment drives every sensor model — flame IR, heat, smoke, water depth, vibration, distance and more.</p>
       <div className="scenario-grid">
-        {SCENARIOS.map((s) => {
+        {SCENARIOS.map((s, i) => {
           const Icon = SCENARIO_ICON[s.id] ?? TestTubeDiagonal;
           return (
-            <button key={s.id} className={`card-pick scenario ${sc.id === s.id ? "on" : ""}`} onClick={() => setScenario({ id: s.id })} title={s.description}>
+            <button key={s.id} style={{ ["--i" as string]: i }} className={`card-pick scenario stagger tilt ${sc.id === s.id ? "on" : ""}`} onClick={() => setScenario({ id: s.id })} title={s.description}>
               <Icon size={20} />
               <span>{s.name}</span>
               <small>{s.thai}</small>

@@ -72,8 +72,8 @@ export function PartsPanel() {
           <>
             <h3 className="group-title">Boards</h3>
             <div className="card-grid boards">
-              {BOARDS.map((b) => (
-                <button key={b.id} className={`card-pick ${project.boardId === b.id ? "on" : ""}`} onClick={() => setBoard(b.id)} title={`${b.name} · ${b.mcu}`}>
+              {BOARDS.map((b, i) => (
+                <button key={b.id} style={{ ["--i" as string]: i }} className={`card-pick stagger tilt ${project.boardId === b.id ? "on" : ""}`} onClick={() => setBoard(b.id)} title={`${b.name} · ${b.mcu}`}>
                   <svg viewBox={`-2 -2 ${b.width + 4} ${b.height + 4}`} className="thumb">
                     <SvgDefs />
                     <Board2D board={b} powered={false} ledOn={false} showLabels={false} />
@@ -91,10 +91,11 @@ export function PartsPanel() {
         <div className="card-grid">
           {parts
             .filter((p) => p.type !== "breadboard" || cat === "all" || cat === "prototyping")
-            .map((p) => (
+            .map((p, i) => (
               <button
                 key={p.type}
-                className="card-pick"
+                className="card-pick stagger tilt"
+                style={{ ["--i" as string]: i }}
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.setData("application/x-tconnect-part", p.type);

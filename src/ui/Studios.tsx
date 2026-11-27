@@ -21,12 +21,13 @@ export function TemplatesPanel() {
       </div>
       <p className="muted small">Each template wires itself to free pins on the current board ({getBoard(project.boardId).short}) and writes matching code.</p>
       <div className="tpl-list">
-        {TEMPLATES.map((t) => {
+        {TEMPLATES.map((t, i) => {
           const ok = templateSupports(t, project.boardId);
           return (
             <button
               key={t.id}
-              className="tpl card-pick"
+              className="tpl card-pick stagger"
+              style={{ ["--i" as string]: i }}
               onClick={() => {
                 const log = load(t.id);
                 window.dispatchEvent(new Event("tconnect:fit"));
