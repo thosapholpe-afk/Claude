@@ -1,5 +1,5 @@
 import { getBoard, resolveBoardPin } from "./boards";
-import { BOARD_ID, endpointPos, footprintOf, instBounds, isBoard } from "./circuit";
+import { BOARD_ID, endpointPos, footprintOf, instBounds, isBoard, isHost } from "./circuit";
 import { getPart, type PartDef } from "./parts";
 import type { BoardDef, BoardPin, Cap, PartInstance, PartPin, Project, Wire } from "./types";
 
@@ -289,7 +289,7 @@ export function runWireCommand(project: Project, text: string): CommandResult {
   for (const st of statements) {
     // "auto" alone or "auto wire all"
     if (/^(auto|auto ?wire( all)?|wire all|ต่ออัตโนมัติ|ต่อสายทั้งหมด|ต่อทั้งหมด)$/i.test(st)) {
-      for (const p of parts.filter((x) => !isBoard(x) && x.type !== "breadboard")) {
+      for (const p of parts.filter((x) => !isBoard(x) && !isHost(x))) {
         const r = autoWirePart({ ...project, parts, wires }, p.id);
         parts = r.parts;
         wires = r.wires;
@@ -382,7 +382,7 @@ export function routeWire(parts: PartInstance[], w: Wire, others: Wire[] = []): 
   const cost = new Float32Array(W * H);
   const toCell = (x: number, y: number) => [Math.round((x - minX) / G), Math.round((y - minY) / G)] as const;
   for (const p of parts) {
-    if (p.type === "breadboard") continue;
+    if (isHost(p)) continue;
     const bb = instBounds(p);
     const [x0, y0] = toCell(bb.x + 0.6, bb.y + 0.6);
     const [x1, y1] = toCell(bb.x + bb.w - 0.6, bb.y + bb.h - 0.6);

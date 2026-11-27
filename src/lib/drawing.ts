@@ -41,7 +41,7 @@ export function specFromPart(def: PartDef): DrawingSpec {
     corner: 1,
     holes: [],
     rects: [],
-    pins: def.pins.filter(() => def.type !== "breadboard").map((p) => ({ x: p.x, y: p.y, label: p.label })),
+    pins: def.pins.filter(() => !def.host).map((p) => ({ x: p.x, y: p.y, label: p.label })),
   };
 }
 

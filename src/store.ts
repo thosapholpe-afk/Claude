@@ -7,6 +7,7 @@ import { engine, type SerialLine, type SimSnapshot } from "./core/sim";
 import { BOARD_ORIGIN, instantiateTemplate, templateFor } from "./core/templates";
 import type { CaseParams, CustomSensorDef, Lang, MqttConfig, PartInstance, Project, ScenarioState, Wire } from "./core/types";
 import { labelPrefix, newId, nextLabel, routeWire, snap } from "./core/wiring";
+import { planMount } from "./core/mount";
 import { loadCustomSensors, loadProject, saveCustomSensors, saveProject } from "./lib/persist";
 
 export type LeftTab = "parts" | "templates" | "ai" | "env" | "mqtt" | "case" | "drawing" | "custom";
@@ -114,6 +115,7 @@ interface State {
   deleteSelection(): void;
   duplicateSelection(): void;
   setProp(id: string, key: string, value: number | string | boolean): void;
+  mountBoard(kind: "breadboard" | "perfboard"): void;
   setLabel(id: string, label: string): void;
   addWire(w: Omit<Wire, "id" | "points" | "color"> & { color?: string }): void;
   tidyWires(ids?: string[]): void;
@@ -201,9 +203,11 @@ export const useStudio = create<State>((set, get) => ({
     const def = getPart(type);
     if (!def) return "";
     const id = newId("u");
-    const p0 = def.pins[0];
-    const x = p0 ? snap(at.x - def.w / 2 + p0.x) - p0.x : at.x - def.w / 2;
-    const y = p0 ? snap(at.y - def.h / 2 + p0.y) - p0.y : at.y - def.h / 2;
+    const props0 = { ...Object.fromEntries(def.props.map((s) => [s.key, s.default])), ...(props ?? {}) };
+    const fp = def.layout ? def.layout(props0) : def;
+    const p0 = fp.pins[0];
+    const x = p0 ? snap(at.x - fp.w / 2 + p0.x) - p0.x : at.x - fp.w / 2;
+    const y = p0 ? snap(at.y - fp.h / 2 + p0.y) - p0.y : at.y - fp.h / 2;
     get().commit((p) => ({
       ...p,
       parts: [
@@ -215,11 +219,11 @@ export const useStudio = create<State>((set, get) => ({
           x,
           y,
           rot: 0,
-          props: { ...Object.fromEntries(def.props.map((s) => [s.key, s.default])), ...(props ?? {}) },
+          props: props0,
         },
       ],
     }));
-    set({ selection: [id], selectedWire: null, burst: { x: x + def.w / 2, y: y + def.h / 2, t: Date.now() } });
+    set({ selection: [id], selectedWire: null, burst: { x: x + fp.w / 2, y: y + fp.h / 2, t: Date.now() } });
     return id;
   },
   movePart: (id, x, y, history = false) => get().commit((p) => ({ ...p, parts: p.parts.map((q) => (q.id === id ? { ...q, x, y } : q)) }), history),
@@ -260,6 +264,28 @@ export const useStudio = create<State>((set, get) => ({
     const spec = def?.props.find((s) => s.key === key);
     if (spec?.live && get().sim.running) engine.setInput(id, { [key]: value as number });
     get().commit((p) => ({ ...p, parts: p.parts.map((q) => (q.id === id ? { ...q, props: { ...q.props, [key]: value } } : q)) }), !spec?.live);
+  },
+  mountBoard: (kind) => {
+    const st = get();
+    const boardInst = st.project.parts.find(isBoard);
+    if (!boardInst) return;
+    const plan = planMount(boardInst, kind);
+    if (!plan.ok || !plan.host || !plan.board) {
+      st.toast(plan.reason ?? "This board can't be mounted", "warn");
+      return;
+    }
+    const hostId = newId("u");
+    const def = getPart(plan.host.type)!;
+    st.commit((p) => ({
+      ...p,
+      parts: [
+        { id: hostId, type: plan.host!.type, label: nextLabel(p.parts, labelPrefix(def)), x: plan.host!.x, y: plan.host!.y, rot: 0, props: { ...Object.fromEntries(def.props.map((s) => [s.key, s.default])), ...plan.host!.props } },
+        ...p.parts.map((q) => (isBoard(q) ? { ...q, x: plan.board!.x, y: plan.board!.y, rot: 0 as const } : q)),
+      ],
+    }));
+    set({ selection: [hostId] });
+    st.toast(`Mounted ${plan.summary}`, "ok");
+    setTimeout(() => window.dispatchEvent(new Event("tconnect:fit")), 50);
   },
   setLabel: (id, label) => get().commit((p) => ({ ...p, parts: p.parts.map((q) => (q.id === id ? { ...q, label } : q)) })),
   addWire: (w) => {

@@ -90,7 +90,7 @@ export function PartsPanel() {
         <h3 className="group-title">{cat === "all" ? "Parts" : CATS.find((c) => c.id === cat)?.label}</h3>
         <div className="card-grid">
           {parts
-            .filter((p) => p.type !== "breadboard" || cat === "all" || cat === "prototyping")
+            .filter((p) => !p.host || cat === "all" || cat === "prototyping")
             .map((p, i) => (
               <button
                 key={p.type}
@@ -275,7 +275,7 @@ export function Inspector() {
       <h3 className="group-title">Pins</h3>
       <ul className="pin-list">
         {def.pins
-          .filter((p) => inst.type !== "breadboard")
+          .filter(() => !def.host)
           .map((p) => {
             const w = project.wires.find((x) => (x.from.part === inst.id && x.from.pin === p.id) || (x.to.part === inst.id && x.to.pin === p.id));
             const other = w ? (w.from.part === inst.id ? w.to : w.from) : null;

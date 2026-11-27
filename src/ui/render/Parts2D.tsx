@@ -1,6 +1,6 @@
 import { memo, type ReactNode } from "react";
 import { LED_HEX, type PartDef, type PartLive } from "../../core/parts";
-import { BB_ROWS } from "../../core/parts";
+import { BB_ROWS, layoutBreadboard, layoutPerfboard } from "../../core/parts";
 import type { PartInstance } from "../../core/types";
 
 const BAND = ["#111", "#7b4a24", "#d6281f", "#f07b12", "#f4d21b", "#2f9e44", "#1f5fd1", "#7f3fbf", "#8a8a8a", "#f2f2f2"];
@@ -511,7 +511,9 @@ export const Part2D = memo(function Part2D({ inst, def, live, t }: { inst: PartI
       );
     }
     case "breadboard":
-      return <Breadboard def={def} />;
+      return <Breadboard cols={Number(inst.props.cols ?? 30)} rails={inst.props.rails !== false} />;
+    case "perfboard":
+      return <Perfboard cols={Number(inst.props.cols ?? 24)} rows={Number(inst.props.rows ?? 18)} kind={String(inst.props.kind ?? "perfboard")} finish={String(inst.props.finish ?? "fr4")} />;
     default:
       if (def.custom) {
         const c = def.custom;
@@ -544,38 +546,85 @@ function Smoke({ x, y, t }: { x: number; y: number; t: number }) {
   );
 }
 
-const Breadboard = memo(function Breadboard({ def }: { def: PartDef }) {
-  const W = def.w;
-  const H = def.h;
+const Breadboard = memo(function Breadboard({ cols, rails }: { cols: number; rails: boolean }) {
+  const L = layoutBreadboard({ cols, rails });
+  const W = L.w;
+  const H = L.h;
+  const P = 2.54;
+  const top = rails ? 4 : 1;
+  const holeRows = L.pins.filter((p) => !/^(t|b)[np]/.test(p.id));
+  const railPins = L.pins.filter((p) => /^(t|b)[np]/.test(p.id));
   return (
     <g>
       <rect x={0.5} y={1} width={W} height={H} rx={1.5} fill="#000" opacity={0.25} filter="url(#tc-soft)" />
       <rect width={W} height={H} rx={1.5} fill="#f1efe6" stroke="#d6d2c2" strokeWidth={0.3} />
-      <rect x={1} y={2.54 * 9.2} width={W - 2} height={2.54 * 0.6 + 2.6} fill="#dcd8ca" />
-      {[
-        [2.54 * 0.55, "#2f6fe0"],
-        [2.54 * 2.45, "#e5322d"],
-        [2.54 * 16.55, "#e5322d"],
-        [2.54 * 18.45, "#2f6fe0"],
-      ].map(([y, c], i) => (
-        <line key={i} x1={3} x2={W - 3} y1={Number(y)} y2={Number(y)} stroke={String(c)} strokeWidth={0.35} opacity={0.75} />
-      ))}
-      {def.pins.map((p) => (
+      <rect x={1} y={P * (top + 4.6)} width={W - 2} height={P * 1.8} fill="#dcd8ca" />
+      {["tn", "tp", "bp", "bn"].map((id) => {
+        const first = railPins.find((p) => p.id === `${id}1`);
+        if (!first) return null;
+        const y = first.y + (id === "tn" || id === "bp" ? -1.15 : 1.15);
+        return <line key={id} x1={3} x2={W - 3} y1={y} y2={y} stroke={id.endsWith("n") ? "#2f6fe0" : "#e5322d"} strokeWidth={0.35} opacity={0.75} />;
+      })}
+      {[...holeRows, ...railPins].map((p) => (
         <rect key={p.id} x={p.x - 0.55} y={p.y - 0.55} width={1.1} height={1.1} rx={0.15} fill="#3a3a36" />
       ))}
       <g fontSize={1.1} fill="#8d8a7e" fontFamily="Chakra Petch" textAnchor="middle">
-        {Array.from({ length: 30 }, (_, i) => i + 1)
+        {Array.from({ length: cols }, (_, i) => i + 1)
           .filter((c) => c === 1 || c % 5 === 0)
           .map((c) => (
-            <text key={c} x={2.54 * (c + 1)} y={2.54 * 3.35}>
+            <text key={c} x={P * (c + 1)} y={P * (top - 0.65)}>
               {c}
             </text>
           ))}
         {BB_ROWS.map((r, i) => (
-          <text key={r} x={2.54 * 0.85} y={2.54 * (i < 5 ? 4 + i : 6 + i) + 0.4}>
+          <text key={r} x={P * 0.85} y={P * (i < 5 ? top + i : top + 2 + i) + 0.4}>
             {r}
           </text>
         ))}
+      </g>
+    </g>
+  );
+});
+
+const PERF_FINISH: Record<string, { board: string; edge: string; pad: string; text: string }> = {
+  fr4: { board: "#1f6e43", edge: "#2c8a57", pad: "#d9dcde", text: "#cfe6d8" },
+  phenolic: { board: "#b98a4b", edge: "#a77a3e", pad: "#d89a5b", text: "#5b3d17" },
+  "fr4-white": { board: "#eceae4", edge: "#d6d3ca", pad: "#c9cdd1", text: "#6b6a65" },
+};
+
+const Perfboard = memo(function Perfboard({ cols, rows, kind, finish }: { cols: number; rows: number; kind: string; finish: string }) {
+  const L = layoutPerfboard({ cols, rows, kind });
+  const f = PERF_FINISH[finish] ?? PERF_FINISH.fr4;
+  const P = 2.54;
+  const pid = `pf-${finish}`;
+  return (
+    <g>
+      <defs>
+        <pattern id={pid} width={P} height={P} patternUnits="userSpaceOnUse" x={P / 2} y={P / 2}>
+          <circle cx={P / 2} cy={P / 2} r={0.88} fill={f.pad} />
+          <circle cx={P / 2} cy={P / 2} r={0.42} fill="#151515" />
+        </pattern>
+      </defs>
+      <rect x={0.5} y={1} width={L.w} height={L.h} rx={1} fill="#000" opacity={0.25} filter="url(#tc-soft)" />
+      <rect width={L.w} height={L.h} rx={1} fill={f.board} stroke={f.edge} strokeWidth={0.3} />
+      {kind === "stripboard" &&
+        Array.from({ length: rows }, (_, r) => <rect key={r} x={P * 0.55} y={P * (r + 1) - 0.95} width={L.w - P * 1.1} height={1.9} rx={0.3} fill={f.pad} opacity={0.38} />)}
+      <rect x={P / 2} y={P / 2} width={P * cols} height={P * rows} fill={`url(#${pid})`} />
+      <g fontSize={0.95} fill={f.text} fontFamily="Chakra Petch" textAnchor="middle" opacity={0.85}>
+        {Array.from({ length: cols }, (_, i) => i + 1)
+          .filter((c) => c === 1 || c % 5 === 0)
+          .map((c) => (
+            <text key={`c${c}`} x={P * c} y={1.6}>
+              {c}
+            </text>
+          ))}
+        {Array.from({ length: rows }, (_, i) => i + 1)
+          .filter((r) => r === 1 || r % 5 === 0)
+          .map((r) => (
+            <text key={`r${r}`} x={1.1} y={P * r + 0.35}>
+              {r}
+            </text>
+          ))}
       </g>
     </g>
   );

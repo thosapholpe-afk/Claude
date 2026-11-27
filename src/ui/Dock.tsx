@@ -8,6 +8,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, CircleAlert, Code2, Eraser, Info
 import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getBoard } from "../core/boards";
+import { isHost } from "../core/circuit";
 import { engine, type MqttMessage } from "../core/sim";
 import { templateFor } from "../core/templates";
 import type { Lang } from "../core/types";
@@ -141,7 +142,7 @@ function DiagPane() {
   const unconnected = useMemo(() => {
     const out: string[] = [];
     for (const p of project.parts) {
-      if (p.type.startsWith("board:") || p.type === "breadboard") continue;
+      if (p.type.startsWith("board:") || isHost(p)) continue;
       const any = project.wires.some((w) => w.from.part === p.id || w.to.part === p.id) || snap?.inserted.some((i) => i.part === p.id);
       if (!any) out.push(`${p.label} is not connected to anything`);
     }

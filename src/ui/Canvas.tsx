@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getBoard } from "../core/boards";
-import { BOARD_ID, endpointPos, footprintOf, instBounds, isBoard, pinWorld } from "../core/circuit";
+import { BOARD_ID, endpointPos, footprintOf, instBounds, isBoard, isHost, pinWorld } from "../core/circuit";
 import { getPart } from "../core/parts";
 import { engine } from "../core/sim";
 import type { PartInstance, Wire } from "../core/types";
@@ -176,7 +176,7 @@ export function Canvas() {
 
   const parts = useMemo(() => {
     const arr = [...project.parts];
-    return arr.sort((a, b) => (a.type === "breadboard" ? -1 : b.type === "breadboard" ? 1 : isBoard(a) ? -1 : isBoard(b) ? 1 : 0));
+    return arr.sort((a, b) => (isHost(a) ? -1 : isHost(b) ? 1 : isBoard(a) ? -1 : isBoard(b) ? 1 : 0));
   }, [project.parts]);
 
   const inserted = useMemo(() => new Set((snapState?.inserted ?? []).map((i) => `${i.part}:${i.pin}`)), [snapState?.inserted]);
@@ -393,7 +393,7 @@ export function Canvas() {
                   ) : null}
                 </g>
                 {sel && <rect className="sel-ring" x={bnd.x - 1.2} y={bnd.y - 1.2} width={bnd.w + 2.4} height={bnd.h + 2.4} rx={1.5} />}
-                {inst.type !== "breadboard" && !isBoard(inst) && (
+                {!isHost(inst) && !isBoard(inst) && (
                   <text className="part-label" x={bnd.x + bnd.w / 2} y={bnd.y + bnd.h + 3.2} textAnchor="middle">
                     {inst.label}
                     {live?.reading !== undefined && running && def?.category !== "output" && def?.type !== "resistor" ? `  ${fmt(live.reading)}${live.readingUnit ?? ""}` : ""}
@@ -416,7 +416,7 @@ export function Canvas() {
             {parts.map((inst) => {
               const fp = footprintOf(inst);
               if (!fp) return null;
-              const bb = inst.type === "breadboard";
+              const bb = isHost(inst);
               return fp.pins.map((p) => {
                 const w = pinWorld(inst, fp, p);
                 const ins = inserted.has(`${inst.id}:${p.id}`);

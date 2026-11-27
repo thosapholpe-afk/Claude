@@ -80,6 +80,17 @@ export interface PartDef {
   keywords: string[];
   pcb?: string;
   custom?: CustomSensorDef;
+  /** Breadboards and perfboards: other parts' pins plug into these holes. */
+  host?: boolean;
+  /** Size-dependent footprint (breadboard columns, perfboard X × Y). */
+  layout?: (props: Record<string, unknown>) => PartLayout;
+}
+
+export interface PartLayout {
+  w: number;
+  h: number;
+  pins: PartPin[];
+  ties: [string, string][];
 }
 
 const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
@@ -96,12 +107,6 @@ export const LED_HEX: Record<string, string> = {
 };
 
 export const BB_ROWS = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
-const RAILS = [
-  { id: "tn", y: 1, label: "−" },
-  { id: "tp", y: 2, label: "+" },
-  { id: "bp", y: 17, label: "+" },
-  { id: "bn", y: 18, label: "−" },
-];
 
 const powered = (c: StampCtx, vcc: string, gnd: string, min: number) => c.supply(vcc, gnd) >= min;
 
@@ -687,16 +692,60 @@ export const PARTS: PartDef[] = [
   // ------------------------------------------------------------------ prototyping
   {
     type: "breadboard",
-    name: "Breadboard (half, 400)",
+    name: "Breadboard",
     category: "prototyping",
-    description: "30 columns × 10 rows plus two power rails on each side.",
-    w: 2.54 * 33,
-    h: 2.54 * 19,
+    description: "Solderless breadboard: columns of 5 connected holes on each side of the channel, plus power rails. Set the number of columns.",
+    w: layoutBreadboard({}).w,
+    h: layoutBreadboard({}).h,
     h3: 8.5,
-    pins: breadboardPins(),
-    props: [],
-    ties: breadboardTies(),
+    pins: layoutBreadboard({}).pins,
+    props: [
+      { key: "cols", label: "Columns", type: "number", default: 30, min: 5, max: 80, step: 1 },
+      { key: "rails", label: "Power rails", type: "boolean", default: true },
+    ],
+    ties: layoutBreadboard({}).ties,
+    layout: layoutBreadboard,
+    host: true,
     keywords: ["breadboard", "เบรดบอร์ด", "protoboard"],
+  },
+  {
+    type: "perfboard",
+    name: "Perfboard (บอร์ดไข่ปลา)",
+    category: "prototyping",
+    description: "Prototype board with a 2.54 mm hole grid. Perfboard pads are isolated — join them with wires; stripboard joins each row. Set X × Y holes.",
+    w: layoutPerfboard({}).w,
+    h: layoutPerfboard({}).h,
+    h3: 1.6,
+    pins: layoutPerfboard({}).pins,
+    props: [
+      { key: "cols", label: "Holes X", type: "number", default: 24, min: 4, max: 90, step: 1 },
+      { key: "rows", label: "Holes Y", type: "number", default: 18, min: 4, max: 70, step: 1 },
+      {
+        key: "kind",
+        label: "Type",
+        type: "select",
+        default: "perfboard",
+        options: [
+          { value: "perfboard", label: "Perfboard (isolated pads)" },
+          { value: "stripboard", label: "Stripboard (rows joined)" },
+        ],
+      },
+      {
+        key: "finish",
+        label: "Board",
+        type: "select",
+        default: "fr4",
+        options: [
+          { value: "fr4", label: "FR4 green" },
+          { value: "phenolic", label: "Phenolic brown" },
+          { value: "fr4-white", label: "FR4 white" },
+        ],
+      },
+    ],
+    ties: layoutPerfboard({}).ties,
+    layout: layoutPerfboard,
+    host: true,
+    keywords: ["perfboard", "protoboard", "stripboard", "veroboard", "ไข่ปลา", "บอร์ดไข่ปลา", "pcb"],
   },
 ];
 
@@ -715,31 +764,71 @@ function servoPost(c: PostCtx, secPer60: number): PartLive {
   return { angle: next, powered: s > 3, reading: next, readingUnit: "°", warn };
 }
 
-function breadboardPins(): PartPin[] {
-  const out: PartPin[] = [];
-  for (let col = 1; col <= 30; col++) {
+const layoutCache = new Map<string, PartLayout>();
+const num = (v: unknown, d: number, lo: number, hi: number) => {
+  const n = Math.round(Number(v ?? d));
+  return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
+};
+
+/** Breadboard geometry: rows a–e and f–j either side of a 3-pitch channel, optional ± rails. */
+export function layoutBreadboard(props: Record<string, unknown>): PartLayout {
+  const cols = num(props.cols, 30, 5, 80);
+  const rails = props.rails !== false;
+  const key = `bb:${cols}:${rails}`;
+  const hit = layoutCache.get(key);
+  if (hit) return hit;
+  const P = 2.54;
+  const top = rails ? 4 : 1;
+  const pins: PartPin[] = [];
+  const ties: [string, string][] = [];
+  for (let col = 1; col <= cols; col++) {
     BB_ROWS.forEach((r, ri) => {
-      const yi = ri < 5 ? 4 + ri : 11 + (ri - 5);
-      out.push({ id: `${r}${col}`, label: `${r}${col}`, x: 2.54 * (col + 1), y: 2.54 * yi, role: "passive" });
+      const yi = ri < 5 ? top + ri : top + 7 + (ri - 5);
+      pins.push({ id: `${r}${col}`, label: `${r}${col}`, x: P * (col + 1), y: P * yi, role: "passive" });
     });
+    for (const group of [BB_ROWS.slice(0, 5), BB_ROWS.slice(5)]) for (let i = 1; i < group.length; i++) ties.push([`${group[0]}${col}`, `${group[i]}${col}`]);
   }
-  for (const rail of RAILS) {
-    for (let k = 0; k < 25; k++) {
-      out.push({ id: `${rail.id}${k + 1}`, label: `${rail.label} rail`, x: 2.54 * (k + 2 + Math.floor(k / 5)), y: 2.54 * rail.y, role: rail.id.endsWith("n") ? "gnd" : "vcc" });
+  if (rails) {
+    const railRows = [
+      { id: "tn", y: 1, label: "−" },
+      { id: "tp", y: 2, label: "+" },
+      { id: "bp", y: top + 13, label: "+" },
+      { id: "bn", y: top + 14, label: "−" },
+    ];
+    let n = 0;
+    while (n + 2 + Math.floor(n / 5) <= cols + 1) n++;
+    for (const rail of railRows) {
+      for (let k = 0; k < n; k++) {
+        pins.push({ id: `${rail.id}${k + 1}`, label: `${rail.label} rail`, x: P * (k + 2 + Math.floor(k / 5)), y: P * rail.y, role: rail.id.endsWith("n") ? "gnd" : "vcc" });
+        if (k > 0) ties.push([`${rail.id}1`, `${rail.id}${k + 1}`]);
+      }
     }
   }
+  const out = { w: P * (cols + 3), h: P * (rails ? top + 15 : top + 13), pins, ties };
+  layoutCache.set(key, out);
   return out;
 }
 
-function breadboardTies(): [string, string][] {
-  const t: [string, string][] = [];
-  for (let col = 1; col <= 30; col++) {
-    for (const group of [BB_ROWS.slice(0, 5), BB_ROWS.slice(5)]) {
-      for (let i = 1; i < group.length; i++) t.push([`${group[0]}${col}`, `${group[i]}${col}`]);
+/** Perfboard / stripboard: a plain X × Y grid on 2.54 mm pitch. */
+export function layoutPerfboard(props: Record<string, unknown>): PartLayout {
+  const cols = num(props.cols, 24, 4, 90);
+  const rows = num(props.rows, 18, 4, 70);
+  const strip = props.kind === "stripboard";
+  const key = `pb:${cols}:${rows}:${strip}`;
+  const hit = layoutCache.get(key);
+  if (hit) return hit;
+  const P = 2.54;
+  const pins: PartPin[] = [];
+  const ties: [string, string][] = [];
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      pins.push({ id: `X${c}Y${r}`, label: `X${c} Y${r}`, x: P * c, y: P * r, role: "passive" });
+      if (strip && c > 1) ties.push([`X1Y${r}`, `X${c}Y${r}`]);
     }
   }
-  for (const rail of RAILS) for (let k = 2; k <= 25; k++) t.push([`${rail.id}1`, `${rail.id}${k}`]);
-  return t;
+  const out = { w: P * (cols + 1), h: P * (rows + 1), pins, ties };
+  layoutCache.set(key, out);
+  return out;
 }
 
 // ---------------------------------------------------------------------------

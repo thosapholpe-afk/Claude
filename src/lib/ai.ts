@@ -1,5 +1,5 @@
 import { getBoard } from "../core/boards";
-import { BOARD_ID, isBoard } from "../core/circuit";
+import { BOARD_ID, isBoard, isHost } from "../core/circuit";
 import { ENV_VARS, SCENARIOS } from "../core/env";
 import { allParts, getPart, PARTS } from "../core/parts";
 import { engine } from "../core/sim";
@@ -53,7 +53,7 @@ export function circuitSummary() {
           label: x.label,
           type: x.type,
           props: x.props,
-          pins: def?.pins.filter(() => x.type !== "breadboard").map((pin) => {
+          pins: def?.pins.filter(() => !def.host).map((pin) => {
             const w = p.wires.find((wr) => (wr.from.part === x.id && wr.from.pin === pin.id) || (wr.to.part === x.id && wr.to.pin === pin.id));
             const other = w ? (w.from.part === x.id ? w.to : w.from) : null;
             return { pin: pin.id, role: pin.role, to: other ? label(other.part, other.pin) : conn.has(`${x.id}:${pin.id}`) ? "?" : null };
@@ -136,7 +136,7 @@ export async function executeTool(name: string, input: Record<string, unknown>):
         let parts = st.project.parts;
         let wires = st.project.wires;
         const log: string[] = [];
-        const targets = input.label ? [findInst(String(input.label))].filter(Boolean) : parts.filter((x) => !isBoard(x) && x.type !== "breadboard");
+        const targets = input.label ? [findInst(String(input.label))].filter(Boolean) : parts.filter((x) => !isBoard(x) && !isHost(x));
         for (const t of targets) {
           const r = autoWirePart({ ...st.project, parts, wires }, t!.id);
           parts = r.parts;
@@ -421,7 +421,7 @@ export async function runLocalAgent(text: string, onAction: (a: ChatAction) => v
   const addMatch = /(add|เพิ่ม|ใส่|วาง)\s*(.+)/i.exec(text);
   if (addMatch && !done.length) {
     const words = addMatch[2].toLowerCase();
-    const def = PARTS.find((p) => p.type !== "breadboard" && p.keywords.some((k) => words.includes(k)));
+    const def = PARTS.find((p) => !p.host && p.keywords.some((k) => words.includes(k))) ?? PARTS.find((p) => p.host && p.keywords.some((k) => words.includes(k)));
     if (def) {
       const r = await act("add_part", { type: def.type });
       const label = (r.result as { label?: string }).label;

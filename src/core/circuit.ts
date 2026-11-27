@@ -9,6 +9,7 @@ export interface Footprint {
   w: number;
   h: number;
   pins: PartPin[];
+  ties?: [string, string][];
 }
 
 export function boardAsPart(board: BoardDef): Footprint {
@@ -30,8 +31,12 @@ export function footprintOf(inst: PartInstance): Footprint | undefined {
     }
     return fp;
   }
-  return getPart(inst.type);
+  const def = getPart(inst.type);
+  if (def?.layout) return def.layout(inst.props);
+  return def;
 }
+
+export const isHost = (inst: PartInstance) => !!getPart(inst.type)?.host;
 
 export function rotatePoint(dx: number, dy: number, rot: number) {
   switch (rot) {
@@ -150,7 +155,8 @@ export function buildTopology(
   for (const inst of parts) {
     if (isBoard(inst)) continue;
     const def = getPart(inst.type);
-    for (const [a, b] of def?.ties ?? []) dsu.union(ensure(epKey(inst.id, a)), ensure(epKey(inst.id, b)));
+    const fpTies = def?.layout ? def.layout(inst.props).ties : def?.ties;
+    for (const [a, b] of fpTies ?? []) dsu.union(ensure(epKey(inst.id, a)), ensure(epKey(inst.id, b)));
     for (const [a, b] of switches.get(inst.id) ?? []) dsu.union(ensure(epKey(inst.id, a)), ensure(epKey(inst.id, b)));
   }
   // wires
@@ -160,7 +166,7 @@ export function buildTopology(
   }
   // breadboard insertion by proximity
   const inserted: Topology["inserted"] = [];
-  const bbs = parts.filter((p) => p.type === "breadboard");
+  const bbs = parts.filter(isHost);
   if (bbs.length) {
     const grid = new Map<string, { bb: string; hole: string }>();
     const gk = (x: number, y: number) => `${Math.round(x * 2)}_${Math.round(y * 2)}`;
@@ -172,7 +178,7 @@ export function buildTopology(
       }
     }
     for (const inst of parts) {
-      if (inst.type === "breadboard") continue;
+      if (isHost(inst)) continue;
       const fp = footprintOf(inst);
       if (!fp) continue;
       for (const p of fp.pins) {
