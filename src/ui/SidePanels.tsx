@@ -222,7 +222,7 @@ export function Inspector() {
         <label key={s.key} className="field">
           <span>
             {s.label}
-            {s.type === "range" && <em>{Math.round(Number(inst.props[s.key] ?? s.default) * 100)}%</em>}
+            {s.type === "range" && <em>{s.unit ? `${Number(inst.props[s.key] ?? s.default)} ${s.unit}` : `${Math.round(Number(inst.props[s.key] ?? s.default) * 100)}%`}</em>}
           </span>
           {s.type === "select" ? (
             <select value={String(inst.props[s.key] ?? s.default)} onChange={(e) => st.setProp(inst.id, s.key, e.target.value)}>
