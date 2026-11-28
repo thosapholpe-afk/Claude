@@ -607,8 +607,8 @@ export function StudioReflections() {
   return (
     <Environment resolution={256} frames={1}>
       <Lightformer intensity={1.6} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#ffffff" />
-      <Lightformer intensity={1.1} position={[-6, 2, 3]} rotation={[0, Math.PI / 2, 0]} scale={[8, 3, 1]} color="#bbf7d0" />
-      <Lightformer intensity={0.9} position={[6, 2, -3]} rotation={[0, -Math.PI / 2, 0]} scale={[8, 3, 1]} color="#d9f99d" />
+      <Lightformer intensity={1.1} position={[-6, 2, 3]} rotation={[0, Math.PI / 2, 0]} scale={[8, 3, 1]} color="#bfdbfe" />
+      <Lightformer intensity={0.9} position={[6, 2, -3]} rotation={[0, -Math.PI / 2, 0]} scale={[8, 3, 1]} color="#a5f3fc" />
       <Lightformer intensity={0.35} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[10, 10, 1]} color="#e9e4dc" />
     </Environment>
   );

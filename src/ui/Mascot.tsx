@@ -5,8 +5,8 @@
  */
 import type { ReactNode } from "react";
 
-const BODY = "#00979d";
-const DARK = "#0b3d40";
+const BODY = "#1f8ff0";
+const DARK = "#0b2552";
 
 /** Wraps a button: the mascot stands behind it, hands on its top edge. */
 export function MascotCta({ children }: { children: ReactNode }) {

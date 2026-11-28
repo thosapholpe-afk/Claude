@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, Box, Cpu, Droplets, Flame, Plus, Thermometer, Waves, Wifi } from "lucide-react";
+import { Activity, ArrowRight, Box, Cpu, Droplets, Factory, Flame, Sparkles, Thermometer, Waves, Wifi, Zap } from "lucide-react";
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { getBoard } from "../core/boards";
@@ -99,9 +99,9 @@ function HeroScene({ t }: { t: number }) {
       <SvgDefs />
       <defs>
         <linearGradient id="heroGrad" x1="0" x2="1">
-          <stop offset="0" stopColor="#2ee58a" />
-          <stop offset="0.5" stopColor="#1fc979" />
-          <stop offset="1" stopColor="#a3e635" />
+          <stop offset="0" stopColor="#3d8bff" />
+          <stop offset="0.5" stopColor="#38bdf8" />
+          <stop offset="1" stopColor="#a5b4fc" />
         </linearGradient>
       </defs>
       <g opacity={0.9}>
@@ -111,7 +111,7 @@ function HeroScene({ t }: { t: number }) {
             cx={66 + Math.sin(i * 2.1 + t * 3) * 3}
             cy={-4 - ((t * 0.8 + i / 14) % 1) * 18 * fire}
             r={(2 + (i % 3)) * fire * (1 - ((t * 0.8 + i / 14) % 1))}
-            fill={i % 3 ? "#fbbf24" : "#1fc979"}
+            fill={i % 3 ? "#fbbf24" : "#38bdf8"}
             opacity={0.8}
             filter="url(#tc-glow)"
           />
@@ -127,7 +127,7 @@ function HeroScene({ t }: { t: number }) {
       <path d="M 50.5 1.3 C 55 -14, 95 -16, 108.7 4.6" stroke="#ff9f1c" strokeWidth={0.8} fill="none" />
       <path d="M 45.4 1.3 C 52 -10, 92 -6, 108.7 7.1" stroke="#ef3b36" strokeWidth={0.8} fill="none" />
       <path d="M 7 1.3 C 0 -18, 100 -22, 108.7 2" stroke="#55555a" strokeWidth={0.8} fill="none" />
-      <path d="M 17.2 26.7 C 18 40, 72 42, 73.8 33.4" stroke="#2ee58a" strokeWidth={0.8} fill="none" />
+      <path d="M 17.2 26.7 C 18 40, 72 42, 73.8 33.4" stroke="#3d8bff" strokeWidth={0.8} fill="none" />
       <g transform="translate(0 52)">
         <rect x={-2} y={0} width={132} height={44} rx={3} fill="var(--panel-2)" />
         <text x={2} y={6} fontSize={3} fill="var(--text-2)" fontFamily="IBM Plex Mono">
@@ -162,9 +162,9 @@ function Orbits({ t }: { t: number }) {
       <svg className="orbits" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         <defs>
           <linearGradient id="orbitGrad" x1="0" x2="1">
-            <stop offset="0" stopColor="#2ee58a" stopOpacity="0.9" />
-            <stop offset="0.5" stopColor="#1fc979" stopOpacity="0.4" />
-            <stop offset="1" stopColor="#a3e635" stopOpacity="0.9" />
+            <stop offset="0" stopColor="#3d8bff" stopOpacity="0.9" />
+            <stop offset="0.5" stopColor="#38bdf8" stopOpacity="0.4" />
+            <stop offset="1" stopColor="#a5b4fc" stopOpacity="0.9" />
           </linearGradient>
         </defs>
         {ORBITS.map((o, i) => (
@@ -193,10 +193,71 @@ function Orbits({ t }: { t: number }) {
 
 const MARQUEE = ["ESP32", "Arduino", "Raspberry Pi Pico", "Raspberry Pi 4", "PLC + Ladder", "Pneumatics", "Servos", "Sensors", "MQTT", "Claude MCP", "STL cases"];
 
+const FACTS = [
+  { title: "Real-time circuit solver", body: "Voltages, currents, overloads — even a burnt LED", icon: Zap },
+  { title: "PLC, ladder & pneumatics", body: "Contactors, timers, 5/2 valves and cylinders", icon: Factory },
+  { title: "Build together with Claude", body: "Connect Claude and watch it wire your bench", icon: Sparkles },
+];
+
+/** Navy night with glowing circuit traces and a skyline of components on the horizon. */
+function Backdrop() {
+  const traces = [
+    "M -20 64 H 150 L 190 104 H 300",
+    "M 1460 90 H 1240 L 1200 130 H 1020 L 990 160",
+    "M -20 470 H 40 L 70 500 V 600",
+    "M 1460 380 H 1330 L 1290 420 H 1180",
+    "M 640 -20 V 40 L 680 80 H 860",
+  ];
+  // deterministic skyline: rows of "buildings" with a few lit windows
+  const blds = Array.from({ length: 34 }, (_, i) => {
+    const w = 28 + ((i * 37) % 46);
+    const h = 50 + ((i * 71) % 170);
+    return { w, h };
+  });
+  let x = -10;
+  return (
+    <div className="backdrop" aria-hidden>
+      <svg className="bd-traces" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+        {traces.map((d, i) => (
+          <g key={i}>
+            <path d={d} className="tr-base" />
+            <path d={d} className="tr-pulse" style={{ animationDelay: `${i * 0.9}s` }} />
+          </g>
+        ))}
+        {[
+          [300, 104],
+          [990, 160],
+          [70, 600],
+          [1180, 420],
+          [860, 80],
+        ].map(([cx, cy]) => (
+          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={5} className="tr-node" />
+        ))}
+      </svg>
+      <svg className="bd-skyline" viewBox="0 0 1440 240" preserveAspectRatio="none">
+        {blds.map((b, i) => {
+          const bx = x;
+          x += b.w + 4;
+          return (
+            <g key={i}>
+              <rect x={bx} y={240 - b.h} width={b.w} height={b.h} className="sk-b" />
+              {Array.from({ length: Math.floor(b.h / 22) }, (_, r) =>
+                Array.from({ length: Math.max(1, Math.floor(b.w / 14)) }, (_, c) =>
+                  (i * 7 + r * 3 + c * 5) % 4 === 0 ? <rect key={`${r}-${c}`} x={bx + 5 + c * 13} y={240 - b.h + 8 + r * 22} width={5} height={7} className="sk-w" /> : null,
+                ),
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 const FEATURES = [
   { title: "Simulate", body: "Drag boards and sensors onto a breadboard, or type “GP10 → LED1” and the wiring picks free pins. Arduino C++, MicroPython and Python run against a real circuit solver.", icon: Cpu },
   { title: "Stimulate", body: "Tell the copilot where the board lives — a burning building, rising water, a motor with a bad bearing — and every sensor reacts on a timeline you control.", icon: Flame },
-  { title: "Stream & measure", body: "Plot any signal, compare runs in the historian, read the FFT, and publish the twin over MQTT to the rest of your system.", icon: Activity },
+  { title: "Stream & measure", body: "Plot any signal, compare runs in the historian, read the FFT, and publish live data over MQTT to the rest of your system.", icon: Activity },
   { title: "Make it physical", body: "Export true-scale drawings in SVG and DXF, and generate a printable enclosure as STL — vented, waterproof or with mounting ears.", icon: Box },
 ];
 
@@ -224,10 +285,8 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
   const canGuest = offline || me?.guest;
   const enter = () => (canGuest ? onLocal() : document.getElementById("signin")?.scrollIntoView({ behavior: "smooth" }));
   return (
-    <div className="landing">
-      <motion.svg className="sweep" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden style={{ rotate: arcRot }}>
-        <motion.path d="M 980 -40 C 520 40, 430 330, 640 560 C 820 760, 760 980, 560 1100" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 2.4, ease: [0.3, 0.7, 0.2, 1] }} />
-      </motion.svg>
+    <div className="landing v2">
+      <Backdrop />
       <header className="land-top">
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <Brand size={34} />
@@ -238,13 +297,13 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
               {f.title}
             </a>
           ))}
-          <button className="btn ghost pill" onClick={() => document.getElementById("signin")?.scrollIntoView({ behavior: "smooth" })}>
+          <button className="btn ghost" onClick={() => document.getElementById("signin")?.scrollIntoView({ behavior: "smooth" })}>
             Sign in
           </button>
         </motion.nav>
       </header>
       <section
-        className="hero"
+        className="hero2"
         ref={heroRef}
         onPointerMove={(e) => {
           const r = heroRef.current!.getBoundingClientRect();
@@ -258,32 +317,49 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
         }}
         style={{ ["--gx" as string]: `${glow.x}%`, ["--gy" as string]: `${glow.y}%` }}
       >
-        <div className="hero-copy">
-          <motion.p className="eyebrow" variants={rise} initial="hidden" animate="show" custom={0}>
-            Digital twin studio
+        <div className="h2-copy">
+          <motion.p className="h2-tag" variants={rise} initial="hidden" animate="show" custom={0}>
+            ESP32 · Arduino · Raspberry Pi · PLC
           </motion.p>
-          <h1>
-            {["Wire it.", "Run it.", "Put it through fire."].map((line, i) => (
-              <motion.span key={line} className={`line ${i === 2 ? "accent" : ""}`} variants={rise} initial="hidden" animate="show" custom={i + 1}>
-                {line}
-              </motion.span>
-            ))}
+          <h1 className="h2-title">
+            <motion.span variants={rise} initial="hidden" animate="show" custom={1}>
+              Thosaphol
+            </motion.span>
+            <motion.span className="outline" variants={rise} initial="hidden" animate="show" custom={2}>
+              Connect
+            </motion.span>
           </h1>
+          <motion.p className="h2-slogan" variants={rise} initial="hidden" animate="show" custom={3}>
+            Build · Wire · Simulate
+          </motion.p>
           <motion.p className="lede" variants={rise} initial="hidden" animate="show" custom={4}>
-            Simulate ESP32, Arduino and Raspberry Pi circuits with real voltages and real firmware — then drop the board into flames, floods or a failing motor and watch your sensors respond.
+            Wire microcontroller and PLC circuits in your browser and run them for real — live voltages, real firmware, ladder logic, pneumatics and 3D.
           </motion.p>
           <motion.p className="lede th" variants={rise} initial="hidden" animate="show" custom={5}>
-            จำลองวงจรไมโครคอนโทรลเลอร์ แล้วโยนบอร์ดเข้าไปในสถานการณ์จริง
+            ต่อวงจร เขียนโค้ดหรือ Ladder แล้วกดรัน — เห็นผลทันทีโดยไม่ต้องซื้ออุปกรณ์สักชิ้น
           </motion.p>
-          <motion.div className="cta-row" variants={rise} initial="hidden" animate="show" custom={6}>
-            <button className="btn primary pill big magnetic" onClick={enter}>
+          <motion.ul className="h2-facts" variants={rise} initial="hidden" animate="show" custom={6}>
+            {FACTS.map((f) => (
+              <li key={f.title}>
+                <i>
+                  <f.icon size={18} />
+                </i>
+                <span>
+                  <b>{f.title}</b>
+                  <small>{f.body}</small>
+                </span>
+              </li>
+            ))}
+          </motion.ul>
+          <motion.div className="cta-row" variants={rise} initial="hidden" animate="show" custom={7}>
+            <button className="btn primary big" onClick={enter}>
               Open the studio <ArrowRight size={17} />
             </button>
-            <a className="btn ghost pill big" href="#how">
+            <a className="btn ghost big outline" href="#how">
               See how it works
             </a>
           </motion.div>
-          <motion.div className="signin" id="signin" variants={rise} initial="hidden" animate="show" custom={7}>
+          <motion.div className="signin" id="signin" variants={rise} initial="hidden" animate="show" custom={8}>
             <span className="muted small">Sign in with</span>
             {PROVIDERS.map((p) => {
               const enabled = !!me?.providers[p.id];
@@ -308,10 +384,9 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
           </motion.div>
           {offline && <p className="muted small">The login server isn't reachable, so sign-in is off. Your work stays in this browser.</p>}
         </div>
-        <motion.div className="hero-stage" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.1, delay: 0.3, ease: [0.2, 0.8, 0.2, 1] }}>
+        <motion.div className="h2-stage" initial={{ opacity: 0, scale: 0.94, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 1, delay: 0.3, ease: [0.2, 0.8, 0.2, 1] }}>
           <motion.div className="stage-inner" style={{ x: stageX, y: stageY, rotateX: stageRX, rotateY: stageRY }}>
-            <Orbits t={t} />
-            <div className="hero-art float browser-frame">
+            <div className="hero-art browser-frame">
               <div className="bf-bar" aria-hidden>
                 <i />
                 <i />
@@ -320,17 +395,16 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
               </div>
               <HeroScene t={t} />
             </div>
+            <div className="h2-chip c1">
+              <small>Room temperature</small>
+              <b>{temp.toFixed(0)} °C</b>
+            </div>
+            <div className="h2-chip c2">
+              <small>Flame IR · GPIO32</small>
+              <b>{Math.round(fire * 100)} %</b>
+            </div>
           </motion.div>
         </motion.div>
-        <motion.aside className="hero-read" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.9, delay: 0.9 }}>
-          <span className="big grad-text">{temp.toFixed(0)}°</span>
-          <span>room temperature</span>
-          <span className="big grad-text">{Math.round(fire * 100)}%</span>
-          <span>flame IR at GPIO32</span>
-        </motion.aside>
-        <motion.button className="plus-btn" aria-label="Open the studio" onClick={enter} initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 160, damping: 14, delay: 1.2 }} whileHover={{ rotate: 90, scale: 1.08 }} whileTap={{ scale: 0.92 }}>
-          <Plus size={22} />
-        </motion.button>
       </section>
       <div className="marquee" aria-hidden>
         <div className="track">
