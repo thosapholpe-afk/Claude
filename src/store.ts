@@ -8,7 +8,7 @@ import { BOARD_ORIGIN, instantiateTemplate, templateFor, templateSupports } from
 import type { CaseParams, CustomSensorDef, Lang, MqttConfig, PartInstance, Project, ScenarioState, Wire } from "./core/types";
 import { labelPrefix, newId, nextLabel, routeWire, snap, WIRE_COLORS } from "./core/wiring";
 import { planMount } from "./core/mount";
-import { loadCustomSensors, loadProject, saveCustomSensors, saveProject } from "./lib/persist";
+import { loadCustomSensors, loadProject, openProject, saveCustomSensors, saveProject } from "./lib/persist";
 
 export type LeftTab = "parts" | "templates" | "ai" | "env" | "mqtt" | "case" | "drawing" | "custom";
 export type DockTab = "code" | "serial" | "plot" | "diag" | "mqtt";
@@ -103,6 +103,11 @@ interface State {
   caseParams: CaseParams;
   wireColor: string | null;
   modal: null | "custom-sensor" | "scan" | "drawing" | "projects" | "export" | "viewer3d" | "claude";
+  /** Projects home or the editor (mirrored in the URL hash: #/ and #/edit). */
+  screen: "home" | "editor";
+  goHome(): void;
+  openEditor(id?: string): void;
+  createProject(opts: { name: string; boardId: string; template?: string }): void;
   /** Claude link (MCP): an external Claude working in this tab. */
   link: {
     on: boolean;
@@ -190,6 +195,34 @@ export const useStudio = create<State>((set, get) => ({
   wireColor: null,
   modal: null,
   link: { on: false, status: "off", busy: null, last: null, log: [] },
+  screen: typeof location !== "undefined" && location.hash.startsWith("#/edit") ? "editor" : "home",
+  goHome: () => {
+    void get().stopSim();
+    saveProject(get().project);
+    set({ screen: "home", modal: null, selection: [], selectedWire: null });
+    if (typeof location !== "undefined" && location.hash !== "#/") history.pushState(null, "", "#/");
+  },
+  openEditor: (id) => {
+    if (id && id !== get().project.id) {
+      saveProject(get().project);
+      const p = openProject(id);
+      if (p) get().setProject(p);
+    }
+    set({ screen: "editor", modal: null });
+    if (typeof location !== "undefined" && !location.hash.startsWith("#/edit")) history.pushState(null, "", "#/edit");
+    setTimeout(() => window.dispatchEvent(new Event("tconnect:fit")), 80);
+  },
+  createProject: ({ name, boardId, template }) => {
+    saveProject(get().project);
+    const nm = name.trim() || "Untitled project";
+    get().setProject(blankProject(boardId, nm));
+    if (template) {
+      get().loadTemplate(template);
+      get().commit((p) => ({ ...p, name: nm }), false);
+    } else if (getBoard(boardId).family === "plc") get().setLang("ladder");
+    saveProject(get().project);
+    get().openEditor();
+  },
   viewerFocus: null,
   selKey: 0,
   openViewer: (id) => set({ viewerFocus: id, modal: "viewer3d" }),
@@ -482,3 +515,15 @@ engine.onSerial((lines) => {
   engine.setCircuit(p.boardId, p.parts, p.wires);
   engine.setEnvironment(p.scenario, p.envOverrides);
 }
+
+// back / forward buttons move between the projects home and the editor
+if (typeof window !== "undefined") {
+  window.addEventListener("popstate", () => {
+    const want = location.hash.startsWith("#/edit") ? "editor" : "home";
+    if (useStudio.getState().screen !== want) {
+      if (want === "home") void useStudio.getState().stopSim();
+      useStudio.setState({ screen: want });
+    }
+  });
+}
+

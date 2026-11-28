@@ -38,6 +38,7 @@ import {
   Gauge,
   Link2,
   Check,
+  LayoutGrid,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -46,7 +47,6 @@ import { getBoard } from "../core/boards";
 import { bomOf, usd } from "../core/prices";
 import { runWireCommand } from "../core/wiring";
 import { click, isMuted, setMuted, setTone, stopAll, stopTone } from "../lib/audio";
-import { initClaudeLink } from "../lib/claudeLink";
 import { useStudio, type LeftTab } from "../store";
 import { AIChat } from "./AIChat";
 import { ClaudeLinkModal, ClaudePill } from "./ClaudeLink";
@@ -115,10 +115,10 @@ function AppBar({ onParts, layout }: { onParts: () => void; layout: string }) {
   if (view !== "3d") lastFlat.current = view;
   return (
     <header className="appbar">
-      <div className="brand">
+      <button className="brand home-btn" onClick={() => st.goHome()} title="All projects" aria-label="Back to all projects">
         <LogoMark size={24} />
         <span className="wordmark">Thosaphol Connect</span>
-      </div>
+      </button>
       <input className="proj-name" value={project.name} onChange={(e) => st.commit((p) => ({ ...p, name: e.target.value }), false)} aria-label="Project name" />
       <div className="seg mode-seg" role="tablist" aria-label="Workspace">
         {(
@@ -326,7 +326,8 @@ function MoreMenu({ phone, cmd }: { phone: boolean; cmd: boolean }) {
               <span>Claude link</span>
               <i className={`cl-dot s-${st.link.status}`} />
             </button>
-            {item(<FolderOpen size={15} />, "Saved works", () => st.set("modal", "projects"))}
+            {item(<LayoutGrid size={15} />, "All projects", () => st.goHome())}
+            {item(<FolderOpen size={15} />, "Import / export", () => st.set("modal", "projects"))}
             {item(<Wrench size={15} />, "Tidy all wires", () => st.tidyWires())}
             <label className="mm-row">
               <Spline size={15} />
@@ -539,7 +540,6 @@ export function Editor() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
-  useEffect(() => initClaudeLink(), []);
   const selKey = useStudio((s) => s.selKey);
   useEffect(() => {
     if (hasSel) setRightTab("auto");

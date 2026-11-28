@@ -37,7 +37,7 @@ interface PendingWire {
   y: number;
 }
 
-function wirePath(a: { x: number; y: number }, b: { x: number; y: number }, pts: { x: number; y: number }[]) {
+export function wirePath(a: { x: number; y: number }, b: { x: number; y: number }, pts: { x: number; y: number }[]) {
   if (pts.length) {
     const all = [a, ...pts, b];
     let d = `M ${a.x} ${a.y}`;

@@ -118,6 +118,11 @@ function open() {
 
 async function run(key: string, call: { id: string; name: string; input: Record<string, unknown> }) {
   setLink({ busy: call.name });
+  // Claude works in the editor: leave the projects home first
+  if (useStudio.getState().screen !== "editor") {
+    useStudio.getState().openEditor();
+    await new Promise((r) => setTimeout(r, 350));
+  }
   let out: { ok: boolean; result: unknown; summary: string; image?: { data: string; mimeType: string } };
   try {
     if (call.name === "screenshot") out = await screenshot(call.input);
