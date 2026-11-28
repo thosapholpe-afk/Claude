@@ -46,7 +46,7 @@ import { LogoMark } from "./Logo";
 import { getBoard } from "../core/boards";
 import { bomOf, usd } from "../core/prices";
 import { runWireCommand } from "../core/wiring";
-import { click, isMuted, setMuted, setTone, stopAll, stopTone } from "../lib/audio";
+import { fx, isMuted, setHiss, setHum, setMuted, setTone, setWhine, stopAll, stopTone } from "../lib/audio";
 import { useStudio, type LeftTab } from "../store";
 import { AIChat } from "./AIChat";
 import { ClaudeLinkModal, ClaudePill } from "./ClaudeLink";
@@ -489,33 +489,171 @@ function Toasts() {
 }
 
 /** Drives buzzer tones and relay clicks from the live simulation. */
+/** Sound effects that follow the live simulation: every part sounds like what it is doing. */
+const SENSOR_FX = new Set(["pir", "flame", "water", "rain", "sw420", "mq2", "mq135", "pulse", "touch", "hall", "ir-obstacle", "sound"]);
 function SoundEngine() {
-  const prevRelay = useRef(new Map<string, boolean>());
   useEffect(() => {
-    let lastOn = new Set<string>();
+    const prev = new Map<string, number | boolean>();
+    const lastShot = new Map<string, number>();
+    const servoIdle = new Map<string, ReturnType<typeof setTimeout>>();
+    let recent: number[] = [];
+    let lastSnap: unknown = null;
+    let wasRunning = false;
+    const voiced = new Set<string>();
+    /** Rate-limited one-shot: max one per part per 70 ms, ten per 100 ms overall. */
+    const shot = (id: string, play: () => void, gap = 70) => {
+      const now = performance.now();
+      if (now - (lastShot.get(id) ?? 0) < gap) return;
+      recent = recent.filter((t) => now - t < 100);
+      if (recent.length >= 10) return;
+      recent.push(now);
+      lastShot.set(id, now);
+      play();
+    };
+    /** Rising/falling edge of a boolean; the first sighting only sets the baseline. */
+    const edge = (key: string, v: boolean): -1 | 0 | 1 => {
+      const was = prev.get(key);
+      prev.set(key, v);
+      if (was === undefined || was === v) return 0;
+      return v ? 1 : -1;
+    };
+    const change = (key: string, v: number): boolean => {
+      const was = prev.get(key);
+      prev.set(key, v);
+      return was !== undefined && was !== v;
+    };
     const unsub = useStudio.subscribe((s) => {
+      const running = s.sim.running;
+      if (running !== wasRunning) {
+        wasRunning = running;
+        if (running) fx.powerOn();
+        else fx.powerOff();
+      }
       const snap = s.snap;
+      if (snap === lastSnap) return;
+      lastSnap = snap;
       if (!snap?.running) {
-        if (lastOn.size) stopAll();
-        lastOn = new Set();
+        if (voiced.size) stopAll();
+        voiced.clear();
+        prev.clear();
         return;
       }
-      const on = new Set<string>();
+      const live = new Set<string>();
       for (const p of s.project.parts) {
         const lv = snap.live[p.id];
         if (!lv) continue;
-        if (p.type === "buzzer" && lv.on && lv.freq) {
-          setTone(p.id, lv.freq);
-          on.add(p.id);
-        }
-        if (p.type === "relay" || p.type === "contactor" || p.type === "timer-relay") {
-          const was = prevRelay.current.get(p.id) ?? false;
-          if (was !== !!lv.on) click();
-          prevRelay.current.set(p.id, !!lv.on);
+        const id = p.id;
+        switch (p.type) {
+          case "led":
+          case "rgb-led": {
+            const b = lv.brightness ?? 0;
+            const was = prev.get(`${id}:lit`);
+            const lit = was ? b > 0.08 : b > 0.25; // hysteresis so PWM fades don't chatter
+            const e = edge(`${id}:lit`, lit);
+            if (e) shot(id, e > 0 ? fx.ledOn : fx.ledOff);
+            if (edge(`${id}:burnt`, !!lv.burnt) > 0) shot(`${id}:b`, fx.burnt, 0);
+            break;
+          }
+          case "pilot-lamp": {
+            const e = edge(`${id}:lit`, !!lv.on);
+            if (e) shot(id, e > 0 ? fx.lampOn : fx.lampOff);
+            break;
+          }
+          case "buzzer":
+            if (lv.on && lv.freq) {
+              setTone(id, lv.freq);
+              live.add(id);
+            }
+            break;
+          case "relay":
+          case "timer-relay": {
+            const e = edge(`${id}:on`, !!(lv.on ?? lv.indicator));
+            if (e) shot(id, () => fx.relay(e > 0));
+            break;
+          }
+          case "contactor": {
+            const e = edge(`${id}:on`, !!lv.on);
+            if (e) shot(id, () => fx.contactor(e > 0));
+            break;
+          }
+          case "overload":
+          case "mcb3":
+            if (edge(`${id}:on`, !!lv.on)) shot(id, fx.breaker);
+            break;
+          case "pb-no":
+          case "pb-nc":
+          case "button":
+          case "joystick": {
+            const e = edge(`${id}:on`, !!lv.on);
+            if (e) shot(id, () => fx.button(e > 0), 30);
+            break;
+          }
+          case "limit-switch": {
+            const e = edge(`${id}:on`, !!lv.on);
+            if (e) shot(id, () => fx.button(e > 0), 30);
+            break;
+          }
+          case "estop":
+            if (edge(`${id}:on`, !!lv.on)) shot(id, fx.estop);
+            break;
+          case "selector2":
+          case "selector3":
+            if (change(`${id}:pos`, Number(lv.reading ?? 0))) shot(id, fx.detent);
+            break;
+          case "air-supply":
+            if (edge(`${id}:on`, !!lv.on)) shot(id, fx.airOpen);
+            break;
+          case "valve52":
+          case "valve52d":
+            if (edge(`${id}:on`, !!lv.on)) shot(id, fx.valve);
+            break;
+          case "cylinder": {
+            if (edge(`${id}:a0`, !!lv.leds?.[0]) > 0) shot(`${id}:a0`, fx.cylinderEnd, 0);
+            if (edge(`${id}:a1`, !!lv.leds?.[1]) > 0) shot(`${id}:a1`, fx.cylinderEnd, 0);
+            if (lv.speed) {
+              setHiss(id, Math.abs(lv.speed) / 400);
+              live.add(id);
+            }
+            break;
+          }
+          case "dc-motor":
+          case "motor3": {
+            const max = p.type === "motor3" ? 1500 : 1.2;
+            if (lv.speed) {
+              setHum(id, lv.speed, max);
+              live.add(id);
+            }
+            break;
+          }
+          case "servo-sg90":
+          case "servo-mg996r": {
+            const a = Math.round((lv.angle ?? 0) * 2) / 2;
+            if (change(`${id}:ang`, a)) {
+              setWhine(id, true);
+              clearTimeout(servoIdle.get(id));
+              servoIdle.set(
+                id,
+                setTimeout(() => stopTone(id), 140),
+              );
+            }
+            break;
+          }
+          case "multimeter":
+            if (lv.indicator) {
+              setTone(id, 2700, 0.02);
+              live.add(id);
+            }
+            break;
+          default:
+            if (SENSOR_FX.has(p.type)) {
+              if (edge(`${id}:det`, !!(lv.indicator ?? lv.on)) > 0) shot(id, () => fx.sensor(p.type), 120);
+            }
         }
       }
-      for (const id of lastOn) if (!on.has(id)) stopTone(id);
-      lastOn = on;
+      // stop the continuous voices whose part went quiet
+      for (const id of voiced) if (!live.has(id) && !servoIdle.has(id)) stopTone(id);
+      voiced.clear();
+      for (const id of live) voiced.add(id);
     });
     return () => {
       unsub();
