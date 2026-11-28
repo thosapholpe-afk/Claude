@@ -217,8 +217,8 @@ export function Viewer3DModal() {
           <directionalLight position={[0, -6, 2]} intensity={0.35} color="#e8eadf" />
           <Environment resolution={256} frames={1}>
             <Lightformer intensity={2.2} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#ffffff" />
-            <Lightformer intensity={1.4} position={[-6, 2, 3]} rotation={[0, Math.PI / 2, 0]} scale={[8, 3, 1]} color="#a5f3fc" />
-            <Lightformer intensity={1.2} position={[6, 2, -3]} rotation={[0, -Math.PI / 2, 0]} scale={[8, 3, 1]} color="#99f6e4" />
+            <Lightformer intensity={1.4} position={[-6, 2, 3]} rotation={[0, Math.PI / 2, 0]} scale={[8, 3, 1]} color="#bbf7d0" />
+            <Lightformer intensity={1.2} position={[6, 2, -3]} rotation={[0, -Math.PI / 2, 0]} scale={[8, 3, 1]} color="#d9f99d" />
             <Lightformer intensity={0.5} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[10, 10, 1]} color="#e9e4dc" />
           </Environment>
           <Scene shown={shown} view={view} spin={spin} explode={explode} onDims={setDims} onUserMove={() => setSpin(false)} />

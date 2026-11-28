@@ -1,7 +1,7 @@
 /**
  * Projects home — the first screen after entering the studio.
- * Recent projects fan out as a deck of cards; every project sits on a shelf of
- * colored spines that open up into a detail card. "New project" asks for a name first.
+ * Projects are playing cards in two decks, microcontroller (green) and PLC (gold);
+ * the chosen deck fans out across the whole screen. "New project" asks for a name first.
  */
 import { ChevronLeft, ChevronRight, Copy, Cpu, Factory, LogOut, Moon, Pencil, Plus, Sun, Trash2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -17,9 +17,13 @@ import { deleteProject, listProjects, openProject, saveProject } from "../lib/pe
 import { useStudio } from "../store";
 import { wirePath } from "./Canvas";
 import { Brand } from "./Logo";
+import { MascotCta } from "./Mascot";
 import { Modal } from "./Modals";
 import { Board2D, SvgDefs } from "./render/Board2D";
 import { Part2D } from "./render/Parts2D";
+
+type DeckId = "mcu" | "plc";
+const deckOf = (p: Project): DeckId => (getBoard(p.boardId).family === "plc" ? "plc" : "mcu");
 
 const ago = (t: number) => {
   const s = Math.max(0, (Date.now() - t) / 1000);
@@ -78,33 +82,47 @@ export const ProjectThumb = memo(
   (a, b) => a.project.id === b.project.id && a.project.updatedAt === b.project.updatedAt,
 );
 
-const SPINE = ["#2f3566", "#c5dc6b", "#e8b99a", "#3f6b57", "#e6e1d3", "#a3343a", "#3b6ea8", "#d9a441"];
-const inkOn = (hex: string) => {
-  const n = parseInt(hex.slice(1), 16);
-  const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return l > 0.6 ? "#1b1d22" : "#f4f1ea";
-};
+/** The fan spacing follows the viewport so the spread fills the screen. */
+function useSpread() {
+  const calc = () => (typeof window === "undefined" ? 70 : Math.max(38, Math.min(118, window.innerWidth * 0.065)));
+  const [s, setS] = useState(calc);
+  useEffect(() => {
+    const on = () => setS(calc());
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return s;
+}
 
-/** Recent projects as a fanned hand of cards: the front one upright, the rest tucked behind. */
-function Deck({ projects, onOpen }: { projects: Project[]; onOpen: (id: string) => void }) {
+/** One deck fanned like a hand of playing cards; the last card starts a new project. */
+function Deck({ deck, projects, onOpen, onNew, refresh }: { deck: DeckId; projects: Project[]; onOpen: (id: string) => void; onNew: () => void; refresh: () => void }) {
   const [active, setActive] = useState(0);
-  const n = projects.length;
-  const go = (d: number) => setActive((a) => Math.max(0, Math.min(n - 1, a + d)));
+  const [confirm, setConfirm] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const spread = useSpread();
+  const n = projects.length + 1; // + the "new project" card
+  const go = (d: number) => {
+    setConfirm(false);
+    setRenaming(false);
+    setActive((a) => Math.max(0, Math.min(n - 1, a + d)));
+  };
   const drag = useRef<{ x: number; moved: boolean } | null>(null);
   const wheel = useRef(0);
+  const current = useStudio((s) => s.project.id);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if ((e.target as HTMLElement)?.tagName === "INPUT" || document.querySelector(".modal-back")) return;
       if (e.key === "ArrowRight") go(1);
       if (e.key === "ArrowLeft") go(-1);
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   });
-  useEffect(() => setActive((a) => Math.min(a, Math.max(0, n - 1))), [n]);
+  useEffect(() => setActive((a) => Math.min(a, n - 1)), [n]);
   const cur = projects[active];
+  const Suit = deck === "plc" ? Factory : Cpu;
   return (
-    <section className="deck-stage" aria-label="Recent projects">
+    <div className={`deck-stage deck-${deck}`}>
       <div
         className="deck"
         onPointerDown={(e) => (drag.current = { x: e.clientX, moved: false })}
@@ -112,7 +130,7 @@ function Deck({ projects, onOpen }: { projects: Project[]; onOpen: (id: string) 
           const d = drag.current;
           if (!d) return;
           const dx = e.clientX - d.x;
-          if (Math.abs(dx) > 56) {
+          if (Math.abs(dx) > 54) {
             go(dx < 0 ? 1 : -1);
             d.x = e.clientX;
             d.moved = true;
@@ -121,188 +139,156 @@ function Deck({ projects, onOpen }: { projects: Project[]; onOpen: (id: string) 
         onPointerUp={() => setTimeout(() => (drag.current = null), 0)}
         onPointerLeave={() => (drag.current = null)}
         onWheel={(e) => {
-          if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return;
-          wheel.current += e.deltaX;
-          if (Math.abs(wheel.current) > 60) {
+          wheel.current += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+          if (Math.abs(wheel.current) > 70) {
             go(wheel.current > 0 ? 1 : -1);
             wheel.current = 0;
           }
         }}
       >
-        {projects.map((p, i) => {
+        {[...projects, null].map((p, i) => {
           const d = i - active;
           const ad = Math.abs(d);
-          if (ad > 4) return null;
+          if (ad > 5) return null;
+          const key = p ? p.id : "new";
+          const anim = { x: d * spread, y: ad * 10, rotate: d * 6, scale: 1 - Math.min(ad, 4) * 0.055, opacity: ad > 4 ? 0 : 1 };
+          if (!p)
+            return (
+              <motion.button
+                key={key}
+                className={`deck-card new-card ${d === 0 ? "front" : ""}`}
+                style={{ zIndex: 60 - ad, transformOrigin: "50% 118%" }}
+                initial={{ y: 140, opacity: 0, rotate: 0 }}
+                animate={anim}
+                transition={{ type: "spring", stiffness: 240, damping: 26, delay: Math.min(i, 6) * 0.03 }}
+                onClick={() => (drag.current?.moved ? null : d === 0 ? onNew() : setActive(i))}
+                aria-label={deck === "plc" ? "New PLC project" : "New microcontroller project"}
+                tabIndex={d === 0 ? 0 : -1}
+              >
+                <Plus size={42} strokeWidth={2.2} />
+                <b>New {deck === "plc" ? "PLC" : "MCU"} project</b>
+                <small>Name it, pick a {deck === "plc" ? "PLC" : "board"}, start building</small>
+              </motion.button>
+            );
           const board = getBoard(p.boardId);
           const parts = p.parts.filter((x) => !isBoard(x)).length;
+          const no = String(i + 1).padStart(2, "0");
           return (
             <motion.button
-              key={p.id}
+              key={key}
               className={`deck-card ${d === 0 ? "front" : ""}`}
-              style={{ zIndex: 50 - ad, transformOrigin: "50% 115%" }}
-              initial={false}
-              animate={{ x: d * 62, y: ad * 8, rotate: d * 6.5, scale: 1 - ad * 0.06, opacity: ad > 3 ? 0 : 1 }}
-              transition={{ type: "spring", stiffness: 260, damping: 28 }}
+              style={{ zIndex: 60 - ad, transformOrigin: "50% 118%" }}
+              initial={{ y: 140, opacity: 0, rotate: 0 }}
+              animate={anim}
+              transition={{ type: "spring", stiffness: 240, damping: 26, delay: Math.min(i, 6) * 0.03 }}
               onClick={() => {
                 if (drag.current?.moved) return;
                 if (d === 0) onOpen(p.id);
-                else setActive(i);
+                else go(d);
               }}
               aria-label={d === 0 ? `Open ${p.name}` : `Show ${p.name}`}
               tabIndex={d === 0 ? 0 : -1}
             >
-              <span className="dc-no">no. {String(i + 1).padStart(2, "0")}</span>
-              <div className="dc-art">
-                <ProjectThumb project={p} />
+              <span className="pc-corner tl">
+                <b>{no}</b>
+                <Suit size={13} />
+              </span>
+              <span className="pc-corner br">
+                <b>{no}</b>
+                <Suit size={13} />
+              </span>
+              <div className="pc-face">
+                <div className="pc-art">
+                  <ProjectThumb project={p} />
+                </div>
+                <strong>{p.name}</strong>
+                <em>
+                  {board.short} · {parts} part{parts === 1 ? "" : "s"} · {ago(p.updatedAt)}
+                </em>
               </div>
-              <strong>{p.name}</strong>
-              <em>
-                {board.short} · {parts} part{parts === 1 ? "" : "s"}
-              </em>
             </motion.button>
           );
         })}
       </div>
-      {cur && (
-        <div className="deck-nav">
-          <button onClick={() => go(-1)} disabled={active === 0} aria-label="Previous project">
-            <ChevronLeft size={16} />
-          </button>
-          <div>
-            <b>{cur.name}</b>
-            <small>
-              {String(active + 1).padStart(2, "0")} / {String(n).padStart(2, "0")} · edited {ago(cur.updatedAt)}
-            </small>
-          </div>
-          <button onClick={() => go(1)} disabled={active === n - 1} aria-label="Next project">
-            <ChevronRight size={16} />
-          </button>
+      <div className="deck-nav">
+        <button onClick={() => go(-1)} disabled={active === 0} aria-label="Previous card">
+          <ChevronLeft size={18} />
+        </button>
+        <div className="dn-mid">
+          {cur && renaming ? (
+            <input
+              className="dn-rename"
+              defaultValue={cur.name}
+              autoFocus
+              onBlur={(e) => {
+                const v = e.currentTarget.value.trim();
+                if (v && v !== cur.name) {
+                  saveProject({ ...cur, name: v, updatedAt: Date.now() });
+                  if (cur.id === current) useStudio.getState().commit((q) => ({ ...q, name: v }), false);
+                  refresh();
+                }
+                setRenaming(false);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+            />
+          ) : (
+            <b>{cur ? cur.name : `New ${deck === "plc" ? "PLC" : "MCU"} project`}</b>
+          )}
+          <small>
+            {String(active + 1).padStart(2, "0")} / {String(n).padStart(2, "0")}
+            {cur ? ` · ≈ ${usd(bomOf(cur).total)} to build` : ""}
+          </small>
+          {cur && (
+            <span className="dn-actions">
+              <button className="dn-open" onClick={() => onOpen(cur.id)}>
+                Open
+              </button>
+              <button onClick={() => setRenaming(true)} aria-label="Rename" title="Rename">
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={() => {
+                  saveProject({ ...cur, id: newId("p"), name: `${cur.name} (copy)`, createdAt: Date.now(), updatedAt: Date.now() });
+                  refresh();
+                }}
+                aria-label="Duplicate"
+                title="Duplicate"
+              >
+                <Copy size={14} />
+              </button>
+              {cur.id !== current &&
+                (confirm ? (
+                  <button
+                    className="dn-del"
+                    onClick={() => {
+                      deleteProject(cur.id);
+                      setConfirm(false);
+                      refresh();
+                    }}
+                  >
+                    Delete?
+                  </button>
+                ) : (
+                  <button onClick={() => setConfirm(true)} aria-label="Delete" title="Delete">
+                    <Trash2 size={14} />
+                  </button>
+                ))}
+            </span>
+          )}
         </div>
-      )}
-    </section>
-  );
-}
-
-/** Every project as a colored spine; the chosen one opens into a card with its drawing and actions. */
-function Shelf({ projects, onOpen, refresh }: { projects: Project[]; onOpen: (id: string) => void; refresh: () => void }) {
-  const [open, setOpen] = useState<string | null>(projects[0]?.id ?? null);
-  const [confirm, setConfirm] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const current = useStudio((s) => s.project.id);
-  const hoverable = typeof matchMedia !== "undefined" && matchMedia("(hover: hover)").matches;
-  useEffect(() => {
-    if (!projects.some((p) => p.id === open)) setOpen(projects[0]?.id ?? null);
-  }, [projects, open]);
-  return (
-    <section className="shelf-wrap" aria-label="All projects">
-      <div className="shelf-head">
-        <p className="kicker">All projects · {projects.length}</p>
-        <small className="muted">{hoverable ? "Hover a spine to open it" : "Tap a spine to open it"}</small>
+        <button onClick={() => go(1)} disabled={active === n - 1} aria-label="Next card">
+          <ChevronRight size={18} />
+        </button>
       </div>
-      <div className="shelf">
-        {projects.map((p, i) => {
-          const on = p.id === open;
-          const bg = SPINE[i % SPINE.length];
-          const ink = inkOn(bg);
-          const board = getBoard(p.boardId);
-          const parts = p.parts.filter((x) => !isBoard(x)).length;
-          return (
-            <motion.div
-              layout
-              key={p.id}
-              className={`spine ${on ? "open" : ""}`}
-              style={{ background: bg, color: ink }}
-              onMouseEnter={() => hoverable && setOpen(p.id)}
-              onClick={() => !on && setOpen(p.id)}
-              transition={{ layout: { type: "spring", stiffness: 320, damping: 34 } }}
-            >
-              {on ? (
-                <motion.div className="spine-body" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.12, duration: 0.25 }}>
-                  <div className="sb-top">
-                    <span className="dc-no">
-                      {String(i + 1).padStart(2, "0")} / {String(projects.length).padStart(2, "0")}
-                    </span>
-                    {p.id === current && <span className="sb-tag">open in editor</span>}
-                  </div>
-                  <div className="sb-art">
-                    <ProjectThumb project={p} />
-                  </div>
-                  {renaming === p.id ? (
-                    <input
-                      className="sb-rename"
-                      defaultValue={p.name}
-                      autoFocus
-                      onBlur={(e) => {
-                        const v = e.currentTarget.value.trim();
-                        if (v && v !== p.name) {
-                          saveProject({ ...p, name: v, updatedAt: Date.now() });
-                          if (p.id === current) useStudio.getState().commit((q) => ({ ...q, name: v }), false);
-                          refresh();
-                        }
-                        setRenaming(null);
-                      }}
-                      onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-                    />
-                  ) : (
-                    <h3>{p.name}</h3>
-                  )}
-                  <p>
-                    {board.name}
-                    <br />
-                    {parts} parts · {p.wires.length} wires · ≈ {usd(bomOf(p).total)} · edited {ago(p.updatedAt)}
-                  </p>
-                  <div className="sb-actions">
-                    <button className="sb-open" onClick={() => onOpen(p.id)}>
-                      Open
-                    </button>
-                    <button onClick={() => setRenaming(p.id)} aria-label="Rename" title="Rename">
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        saveProject({ ...p, id: newId("p"), name: `${p.name} (copy)`, createdAt: Date.now(), updatedAt: Date.now() });
-                        refresh();
-                      }}
-                      aria-label="Duplicate"
-                      title="Duplicate"
-                    >
-                      <Copy size={14} />
-                    </button>
-                    {p.id !== current &&
-                      (confirm === p.id ? (
-                        <button
-                          className="sb-del"
-                          onClick={() => {
-                            deleteProject(p.id);
-                            setConfirm(null);
-                            refresh();
-                          }}
-                        >
-                          Delete?
-                        </button>
-                      ) : (
-                        <button onClick={() => setConfirm(p.id)} aria-label="Delete" title="Delete">
-                          <Trash2 size={14} />
-                        </button>
-                      ))}
-                  </div>
-                </motion.div>
-              ) : (
-                <span className="spine-label">{p.name}</span>
-              )}
-            </motion.div>
-          );
-        })}
-      </div>
-    </section>
+    </div>
   );
 }
 
 /** Name first, then pick the kind of project, the board and an optional starter. */
-function NewProjectDialog({ onClose }: { onClose: () => void }) {
+function NewProjectDialog({ onClose, initialMode }: { onClose: () => void; initialMode: DeckId }) {
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<"mcu" | "plc">("mcu");
-  const [boardId, setBoardId] = useState("esp32-devkit-v1");
+  const [mode, setMode] = useState<DeckId>(initialMode);
+  const [boardId, setBoardId] = useState(initialMode === "plc" ? "plc-fx16" : "esp32-devkit-v1");
   const [template, setTemplate] = useState("");
   const [touched, setTouched] = useState(false);
   const boards = BOARDS.filter((b) => (b.family === "plc") === (mode === "plc"));
@@ -340,7 +326,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
               ["plc", "PLC & control", "Ladder logic · relays · pneumatics", Factory],
             ] as const
           ).map(([id, label, sub, Icon]) => (
-            <button type="button" key={id} role="tab" aria-selected={mode === id} className={mode === id ? "on" : ""} onClick={() => setMode(id)}>
+            <button type="button" key={id} role="tab" aria-selected={mode === id} className={`${mode === id ? "on" : ""} m-${id}`} onClick={() => setMode(id)}>
               <Icon size={18} />
               <span>
                 <b>{label}</b>
@@ -404,6 +390,8 @@ export function ProjectsHome() {
       .filter((p): p is Project => !!p)
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }, [rev]);
+  const decks = useMemo(() => ({ mcu: projects.filter((p) => deckOf(p) === "mcu"), plc: projects.filter((p) => deckOf(p) === "plc") }), [projects]);
+  const [deck, setDeck] = useState<DeckId>(() => (projects[0] ? deckOf(projects[0]) : "mcu"));
   const refresh = () => setRev((r) => r + 1);
   const open = (id: string) => useStudio.getState().openEditor(id);
   const first = (user?.name ?? "").split(" ")[0];
@@ -449,28 +437,43 @@ export function ProjectsHome() {
             </button>
           </span>
         )}
-        <button className="btn primary" onClick={() => setCreating(true)}>
-          <Plus size={15} /> New project
-        </button>
       </header>
-      <section className="home-hero">
-        <p className="kicker">{projects.length ? "Your projects" : "Welcome"}</p>
-        <h1>{projects.length ? (first ? `Welcome back, ${first}.` : "Pick up where you left off.") : "Start your first project."}</h1>
-        <p className="lede">{projects.length ? "Swipe through your work, open a project to keep building, or start something new." : "Name it, pick a board or a PLC, and start from a blank bench or a ready-made template."}</p>
-      </section>
-      {projects.length ? (
-        <>
-          <Deck projects={projects.slice(0, 12)} onOpen={open} />
-          <Shelf projects={projects} onOpen={open} refresh={refresh} />
-        </>
-      ) : (
-        <button className="home-empty" onClick={() => setCreating(true)}>
-          <Plus size={28} />
-          <b>Create new project</b>
-          <small>Give it a name — you can change everything else later</small>
-        </button>
-      )}
-      <AnimatePresence>{creating && <NewProjectDialog onClose={() => setCreating(false)} />}</AnimatePresence>
+      <div className="home-head">
+        <div className="hh-copy">
+          <p className="kicker">{projects.length ? "Your decks" : "Welcome"}</p>
+          <h1>{first ? `Hi ${first}, pick a deck.` : "Pick a deck."}</h1>
+          <div className="deck-switch" role="tablist" aria-label="Decks">
+            {(
+              [
+                ["mcu", "MCU", Cpu],
+                ["plc", "PLC", Factory],
+              ] as const
+            ).map(([id, label, Icon]) => (
+              <button key={id} role="tab" aria-selected={deck === id} className={`ds-${id} ${deck === id ? "on" : ""}`} onClick={() => setDeck(id)}>
+                <span className="ds-pile" aria-hidden>
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <Icon size={15} />
+                <b>{label}</b>
+                <small>{decks[id].length}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+        <MascotCta>
+          <button className="btn primary np-btn" onClick={() => setCreating(true)}>
+            <Plus size={17} /> New project
+          </button>
+        </MascotCta>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div key={deck} className="deck-wrap" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, y: 30, transition: { duration: 0.18 } }}>
+          <Deck deck={deck} projects={decks[deck]} onOpen={open} onNew={() => setCreating(true)} refresh={refresh} />
+        </motion.div>
+      </AnimatePresence>
+      <AnimatePresence>{creating && <NewProjectDialog initialMode={deck} onClose={() => setCreating(false)} />}</AnimatePresence>
     </div>
   );
 }

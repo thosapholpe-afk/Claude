@@ -99,9 +99,9 @@ function HeroScene({ t }: { t: number }) {
       <SvgDefs />
       <defs>
         <linearGradient id="heroGrad" x1="0" x2="1">
-          <stop offset="0" stopColor="#2dd4bf" />
-          <stop offset="0.5" stopColor="#22d3ee" />
-          <stop offset="1" stopColor="#38bdf8" />
+          <stop offset="0" stopColor="#2ee58a" />
+          <stop offset="0.5" stopColor="#1fc979" />
+          <stop offset="1" stopColor="#a3e635" />
         </linearGradient>
       </defs>
       <g opacity={0.9}>
@@ -111,7 +111,7 @@ function HeroScene({ t }: { t: number }) {
             cx={66 + Math.sin(i * 2.1 + t * 3) * 3}
             cy={-4 - ((t * 0.8 + i / 14) % 1) * 18 * fire}
             r={(2 + (i % 3)) * fire * (1 - ((t * 0.8 + i / 14) % 1))}
-            fill={i % 3 ? "#fbbf24" : "#22d3ee"}
+            fill={i % 3 ? "#fbbf24" : "#1fc979"}
             opacity={0.8}
             filter="url(#tc-glow)"
           />
@@ -127,7 +127,7 @@ function HeroScene({ t }: { t: number }) {
       <path d="M 50.5 1.3 C 55 -14, 95 -16, 108.7 4.6" stroke="#ff9f1c" strokeWidth={0.8} fill="none" />
       <path d="M 45.4 1.3 C 52 -10, 92 -6, 108.7 7.1" stroke="#ef3b36" strokeWidth={0.8} fill="none" />
       <path d="M 7 1.3 C 0 -18, 100 -22, 108.7 2" stroke="#55555a" strokeWidth={0.8} fill="none" />
-      <path d="M 17.2 26.7 C 18 40, 72 42, 73.8 33.4" stroke="#2dd4bf" strokeWidth={0.8} fill="none" />
+      <path d="M 17.2 26.7 C 18 40, 72 42, 73.8 33.4" stroke="#2ee58a" strokeWidth={0.8} fill="none" />
       <g transform="translate(0 52)">
         <rect x={-2} y={0} width={132} height={44} rx={3} fill="var(--panel-2)" />
         <text x={2} y={6} fontSize={3} fill="var(--text-2)" fontFamily="IBM Plex Mono">
@@ -162,9 +162,9 @@ function Orbits({ t }: { t: number }) {
       <svg className="orbits" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         <defs>
           <linearGradient id="orbitGrad" x1="0" x2="1">
-            <stop offset="0" stopColor="#2dd4bf" stopOpacity="0.9" />
-            <stop offset="0.5" stopColor="#22d3ee" stopOpacity="0.4" />
-            <stop offset="1" stopColor="#38bdf8" stopOpacity="0.9" />
+            <stop offset="0" stopColor="#2ee58a" stopOpacity="0.9" />
+            <stop offset="0.5" stopColor="#1fc979" stopOpacity="0.4" />
+            <stop offset="1" stopColor="#a3e635" stopOpacity="0.9" />
           </linearGradient>
         </defs>
         {ORBITS.map((o, i) => (
