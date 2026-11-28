@@ -31,7 +31,7 @@ export function TemplatesPanel() {
               onClick={() => {
                 const log = load(t.id);
                 window.dispatchEvent(new Event("tconnect:fit"));
-                toast(log.length ? log.join(" · ") : `Loaded “${t.name}” — press Start Simulation`, log.length ? "warn" : "ok");
+                toast(log.length ? log.join(" · ") : `Loaded “${t.name}” — press Simulate`, log.length ? "warn" : "ok");
               }}
             >
               <strong>{t.name}</strong>
