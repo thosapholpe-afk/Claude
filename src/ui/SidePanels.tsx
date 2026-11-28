@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { BOARDS, getBoard } from "../core/boards";
 import { BOARD_ID, buildTopology, footprintOf, isBoard } from "../core/circuit";
 import { planMount } from "../core/mount";
+import { boardPrice, partPrice, usd } from "../core/prices";
 import { allParts, getPart, type PartDef } from "../core/parts";
 import { engine } from "../core/sim";
 import type { PartCategory } from "../core/types";
@@ -87,6 +88,11 @@ export function PartsPanel() {
                     <Board2D board={b} powered={false} ledOn={false} showLabels={false} />
                   </svg>
                   <span>{b.short}</span>
+                  {boardPrice(b.id) !== undefined && (
+                    <small className="card-meta">
+                      <b>{usd(boardPrice(b.id)!)}</b>
+                    </small>
+                  )}
                 </button>
               ))}
             </div>
@@ -114,6 +120,10 @@ export function PartsPanel() {
               >
                 <PartThumb def={p} />
                 <span>{p.name}</span>
+                <small className="card-meta">
+                  <i>SIM</i>
+                  {partPrice(p.type) !== undefined && partPrice(p.type)! > 0 && <b>{usd(partPrice(p.type)!)}</b>}
+                </small>
               </button>
             ))}
         </div>

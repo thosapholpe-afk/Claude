@@ -2,6 +2,7 @@ import { ContactShadows, Environment, Lightformer, OrbitControls } from "@react-
 import { Bloom, EffectComposer, ToneMapping, Vignette } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
 import { Canvas, type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
+import { Box, Columns2, Maximize, RectangleHorizontal, Square } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { builtinLedId, builtinLedLit, getBoard } from "../core/boards";
@@ -352,6 +353,44 @@ function Room({ span, wall, floor }: { span: number; wall: string; floor: string
   );
 }
 
+/** Lab bench: a light mat printed with a 1 cm grid and 5 cm major lines. */
+function Bench({ span }: { span: number }) {
+  const R = Math.max(30, span * 4);
+  const tex = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 512;
+    const g = c.getContext("2d")!;
+    g.fillStyle = "#d3d9df";
+    g.fillRect(0, 0, 512, 512);
+    g.strokeStyle = "#b6c0ca";
+    g.lineWidth = 2;
+    for (let i = 1; i < 5; i++) {
+      const x = (i * 512) / 5;
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x, 512);
+      g.moveTo(0, x);
+      g.lineTo(512, x);
+      g.stroke();
+    }
+    g.strokeStyle = "#8d9aa7";
+    g.lineWidth = 4;
+    g.strokeRect(0, 0, 512, 512);
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set((R * 2) / 5, (R * 2) / 5);
+    t.anisotropy = 8;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [R]);
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
+      <planeGeometry args={[R * 2, R * 2]} />
+      <meshStandardMaterial map={tex} roughness={0.95} />
+    </mesh>
+  );
+}
+
 function Plants({ span }: { span: number }) {
   return (
     <group position={[0, 0, -span * 0.9]}>
@@ -488,7 +527,12 @@ function Atmosphere() {
     let bg = theme ? "#e6e5e1" : "#232326";
     let fogC = bg;
     let density = 0.012;
-    if (scenario === "building-fire") {
+    if (scenario === "lab") {
+      // the bench: light grey mat with a fine grid, same in both themes
+      bg = theme ? "#d9dfe5" : "#c3cbd3";
+      fogC = bg;
+      density = 0.006;
+    } else if (scenario === "building-fire") {
       bg = "#1a0d08";
       fogC = "#2a1610";
       density = 0.015 + Math.min(1, (env?.smoke ?? 0) / 3000) * 0.05;
@@ -540,6 +584,10 @@ function Lights() {
       const flash = Math.min(1, Math.max(0, ((env?.lux ?? 0) - 20000) / 50000));
       sun.current.intensity = 0.5 + flash * 9;
       amb.current.intensity = 0.25 + flash * 1.5;
+    } else if (scenario === "lab") {
+      // light bench mat: softer light so white parts don't wash out
+      sun.current.intensity = 1.5;
+      amb.current.intensity = 0.25;
     } else {
       sun.current.intensity = 2.4;
       amb.current.intensity = 0.7;
@@ -559,8 +607,8 @@ export function StudioReflections() {
   return (
     <Environment resolution={256} frames={1}>
       <Lightformer intensity={1.6} position={[0, 6, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[12, 12, 1]} color="#ffffff" />
-      <Lightformer intensity={1.1} position={[-6, 2, 3]} rotation={[0, Math.PI / 2, 0]} scale={[8, 3, 1]} color="#e8d4a2" />
-      <Lightformer intensity={0.9} position={[6, 2, -3]} rotation={[0, -Math.PI / 2, 0]} scale={[8, 3, 1]} color="#bcd9a2" />
+      <Lightformer intensity={1.1} position={[-6, 2, 3]} rotation={[0, Math.PI / 2, 0]} scale={[8, 3, 1]} color="#a5f3fc" />
+      <Lightformer intensity={0.9} position={[6, 2, -3]} rotation={[0, -Math.PI / 2, 0]} scale={[8, 3, 1]} color="#99f6e4" />
       <Lightformer intensity={0.35} position={[0, -5, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={[10, 10, 1]} color="#e9e4dc" />
     </Environment>
   );
@@ -584,19 +632,59 @@ export function Glow({ vignette = true }: { vignette?: boolean }) {
   );
 }
 
-function CameraRig({ preset, span }: { preset: string; span: number }) {
-  const { camera } = useThree();
+function CameraRig({ preset, span, fit }: { preset: string; span: number; fit: number }) {
+  const { camera, controls } = useThree();
   useEffect(() => {
     const d = Math.max(7, span * 1.05);
     const pos: Record<string, [number, number, number]> = {
       angled: [d * 0.55, d * 0.62, d * 0.85],
       top: [0.001, d * 1.25, 0.001],
       front: [0, d * 0.25, d * 1.15],
+      right: [d * 1.15, d * 0.25, 0.001],
     };
     camera.position.set(...(pos[preset] ?? pos.angled));
     camera.lookAt(0, 0, 0);
-  }, [preset, span, camera]);
+    const c = controls as unknown as { target?: THREE.Vector3; update?: () => void } | null;
+    if (c?.target) {
+      c.target.set(0, 0, 0);
+      c.update?.();
+    }
+  }, [preset, span, camera, controls, fit]);
   return null;
+}
+
+/** What every part is doing right now, like a bench multimeter for the whole circuit. */
+function LiveReadings() {
+  const parts = useStudio((s) => s.project.parts);
+  const live = useStudio((s) => s.snap?.live);
+  const running = useStudio((s) => s.sim.running);
+  if (!running || !live) return null;
+  const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
+  const rows = parts
+    .filter((p) => !isBoard(p) && !isHost(p) && live[p.id])
+    .map((p) => {
+      const l = live[p.id];
+      let v = "";
+      if (p.type === "cylinder") v = `${fmt(Number(l.reading ?? 0))} mm${l.speed ? (l.speed > 0 ? " →" : " ←") : ""}`;
+      else if (l.speed) v = `${Math.round(l.speed)} rpm`;
+      else if (l.reading !== undefined && Number.isFinite(l.reading) && l.readingUnit && l.readingUnit !== "pos") v = `${fmt(l.reading)} ${l.readingUnit}`;
+      else if (l.text?.length) v = l.text.join(" ");
+      else if (l.on !== undefined) v = l.on ? "ON" : "off";
+      return { label: p.label, v, on: !!l.on };
+    })
+    .filter((r) => r.v)
+    .slice(0, 12);
+  if (!rows.length) return null;
+  return (
+    <dl className="live-rows">
+      {rows.map((r) => (
+        <div key={r.label} className={r.on ? "on" : ""}>
+          <dt>{r.label}</dt>
+          <dd>{r.v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
 }
 
 export function Twin3D() {
@@ -608,16 +696,19 @@ export function Twin3D() {
   const c = useCenter();
   const span = Math.max(6, c.span);
   const [preset, setPreset] = useState("angled");
+  const [fit, setFit] = useState(0);
   const Icon = SCENARIO_ICON[scenario.id];
   return (
     <div className="twin3d">
       <Canvas shadows flat dpr={[1, 2]} camera={{ fov: 40, near: 0.1, far: 400 }} gl={{ antialias: true, preserveDrawingBuffer: true }}>
-        <CameraRig preset={preset} span={span} />
+        <CameraRig preset={preset} span={span} fit={fit} />
         <Atmosphere />
         <Lights />
         <Rig span={span} />
         {scenario.id === "motor-vibration" ? (
           <Motor span={span} />
+        ) : scenario.id === "lab" ? (
+          <Bench span={span} />
         ) : (
           <Room span={span} wall={scenario.id === "building-fire" ? "#2a1a14" : scenario.id === "cold-storage" ? "#d6e6ef" : scenario.id === "day-night" || scenario.id === "greenhouse" ? "#000000" : "#2c2c31"} floor={scenario.id === "building-fire" ? "#241a16" : scenario.id === "cold-storage" ? "#e8f1f6" : scenario.id === "greenhouse" ? "#5a3b22" : "#232326"} />
         )}
@@ -633,28 +724,34 @@ export function Twin3D() {
         <Glow />
       </Canvas>
       <div className="twin-hud">
-        <div className="seg">
-          {[
-            ["top", "Top"],
-            ["front", "Front"],
-            ["angled", "Angled"],
-          ].map(([id, l]) => (
-            <button key={id} className={preset === id ? "on" : ""} onClick={() => setPreset(id)}>
-              {l}
-            </button>
-          ))}
-          <button className="primary" onClick={() => set("view", "2d")}>
-            Back to 2D
+        {(
+          [
+            ["angled", "Iso", Box],
+            ["top", "Top", Square],
+            ["front", "Front", RectangleHorizontal],
+            ["right", "Right", Columns2],
+          ] as const
+        ).map(([id, l, I]) => (
+          <button key={id} className={preset === id ? "on" : ""} onClick={() => setPreset(id)}>
+            <I size={13} />
+            {l}
           </button>
-        </div>
+        ))}
+        <i className="hud-sep" />
+        <button onClick={() => setFit((n) => n + 1)} title="Frame the whole circuit">
+          <Maximize size={13} />
+          Fit
+        </button>
       </div>
       <div className="twin-card">
+        <h4 className="twin-kicker">Live readings</h4>
         <div className="twin-title">
-          {Icon && <Icon size={16} />}
+          {Icon && <Icon size={15} />}
           <strong>{def.name}</strong>
           <span className="muted">{def.thai}</span>
         </div>
-        {!running && <p className="small muted">Start the simulation to run the timeline.</p>}
+        {!running && <p className="small muted">Press Simulate to see live values.</p>}
+        <LiveReadings />
         {env && (
           <dl>
             <dt>Temp</dt>

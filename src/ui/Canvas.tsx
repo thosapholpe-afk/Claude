@@ -369,7 +369,7 @@ export function Canvas() {
             </g>
           );
         })()}
-        {live && <path d={d} className="flow" stroke={air ? "#d4f1ff" : v > 4 ? "#f5b0a3" : "#e8d4a2"} strokeWidth={air ? 0.7 : 0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${air ? 0.7 : Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
+        {live && <path d={d} className="flow" stroke={air ? "#d4f1ff" : v > 4 ? "#fbbf24" : "#5eead4"} strokeWidth={air ? 0.7 : 0.5} fill="none" strokeLinecap="round" style={{ animationDuration: `${air ? 0.7 : Math.max(0.35, 1.6 - v * 0.2)}s` }} />}
         <circle cx={a.x} cy={a.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
         <circle cx={b.x} cy={b.y} r={0.7} fill={w.color} stroke="rgba(0,0,0,.5)" strokeWidth={0.2} />
       </g>

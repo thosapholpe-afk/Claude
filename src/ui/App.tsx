@@ -37,11 +37,13 @@ import {
   Spline,
   Gauge,
   Link2,
+  Check,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { LogoMark } from "./Logo";
 import { getBoard } from "../core/boards";
+import { bomOf, usd } from "../core/prices";
 import { runWireCommand } from "../core/wiring";
 import { click, isMuted, setMuted, setTone, stopAll, stopTone } from "../lib/audio";
 import { initClaudeLink } from "../lib/claudeLink";
@@ -109,6 +111,8 @@ function AppBar({ onParts, layout }: { onParts: () => void; layout: string }) {
   const plc = getBoard(project.boardId).family === "plc";
   const errs = diag.filter((d) => d.level === "error").length;
   const phone = layout === "phone";
+  const lastFlat = useRef<"2d" | "diagram">("2d");
+  if (view !== "3d") lastFlat.current = view;
   return (
     <header className="appbar">
       <div className="brand">
@@ -133,22 +137,25 @@ function AppBar({ onParts, layout }: { onParts: () => void; layout: string }) {
           );
         })}
       </div>
+      <Steps phone={phone} onParts={onParts} layout={layout} />
       <div className="seg view-seg" role="tablist" aria-label="View">
         {(
           [
-            ["2d", "Board", CircuitBoard, "Realistic board view"],
-            ["diagram", "Wiring", Workflow, "Wiring diagram only"],
-            ["3d", "3D", Orbit, "3D twin"],
+            ["flat", "2D", CircuitBoard, "Board and wiring view"],
+            ["3d", "3D", Orbit, "3D bench"],
           ] as const
-        ).map(([id, label, Icon, title]) => (
-          <button key={id} role="tab" aria-selected={view === id} className={view === id ? "on" : ""} onClick={() => st.set("view", id)} title={title}>
-            {view === id && <motion.span layoutId="view-pill" className="seg-pill" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
-            <Icon size={14} />
-            <span className="seg-lbl">{label}</span>
-          </button>
-        ))}
+        ).map(([id, label, Icon, title]) => {
+          const on = id === "3d" ? view === "3d" : view !== "3d";
+          return (
+            <button key={id} role="tab" aria-selected={on} className={on ? "on" : ""} onClick={() => st.set("view", id === "3d" ? "3d" : lastFlat.current)} title={title}>
+              {on && <motion.span layoutId="view-pill" className="seg-pill" transition={{ type: "spring", stiffness: 420, damping: 34 }} />}
+              <Icon size={14} />
+              <span className="seg-lbl">{label}</span>
+            </button>
+          );
+        })}
       </div>
-      {!phone && <CommandBar />}
+      {layout === "desktop" && <CommandBar />}
       <span className="spacer" />
       <ClaudePill compact={phone} />
       <button className={`btn ghost icon-ish diag-pill ${errs ? "bad" : diag.length ? "warn" : ""}`} onClick={() => useStudio.setState({ dockTab: "diag", dockOpen: true })} title={errs ? `${errs} electrical issue(s)` : diag.length ? `${diag.length} note(s)` : "Circuit OK"}>
@@ -165,20 +172,91 @@ function AppBar({ onParts, layout }: { onParts: () => void; layout: string }) {
       )}
       <button className={`btn run ${running ? "stop" : ""}`} onClick={() => (running ? void st.stopSim() : void st.startSim())} aria-label={running ? "Stop simulation" : "Start simulation"}>
         {running ? <Square size={15} /> : <Play size={15} />}
-        <span className="run-lbl">{running ? "Stop" : "Run"}</span>
+        <span className="run-lbl">{running ? "Stop" : "Simulate"}</span>
       </button>
       {layout === "tablet" && (
         <button className="btn icon ghost" onClick={onParts} aria-label="Components and inspector" title="Components">
           <PanelRight size={17} />
         </button>
       )}
-      <MoreMenu phone={phone} />
+      <MoreMenu phone={phone} cmd={layout !== "desktop"} />
     </header>
   );
 }
 
+/** The build → wire → code → simulate workflow as numbered steps; done steps get a check. */
+function Steps({ phone, onParts, layout }: { phone: boolean; onParts: () => void; layout: string }) {
+  const view = useStudio((s) => s.view);
+  const project = useStudio((s) => s.project);
+  const st = useStudio.getState();
+  const hasParts = project.parts.filter((p) => !p.type.startsWith("board:")).length > 0;
+  const hasWires = project.wires.length > 0;
+  const code = project.code[project.lang] ?? "";
+  const codeDone = code.trim().length > 20;
+  const steps = [
+    { id: "build", n: 1, label: "Build", done: hasParts, on: view === "2d", go: () => {
+      st.set("view", "2d");
+      st.select([]);
+      if (layout !== "desktop") onParts();
+    } },
+    { id: "wire", n: 2, label: "Wire", done: hasWires, on: view === "diagram", go: () => st.set("view", "diagram") },
+    { id: "code", n: 3, label: "Code", done: codeDone, on: false, go: () => useStudio.setState({ dockTab: "code", dockOpen: true }) },
+  ];
+  return (
+    <nav className="steps" aria-label="Workflow">
+      {steps.map((x) => (
+        <button key={x.id} className={`step ${x.on ? "on" : ""} ${x.done ? "done" : ""}`} onClick={x.go} title={x.label}>
+          <i>{x.done ? <Check size={11} strokeWidth={3} /> : x.n}</i>
+          {!phone && <span>{x.label}</span>}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+/** Bottom status line: run state, counts, selection, estimated cost, problems. */
+function StatusBar() {
+  const project = useStudio((s) => s.project);
+  const running = useStudio((s) => s.sim.running);
+  const paused = useStudio((s) => s.sim.paused);
+  const speed = useStudio((s) => s.sim.speed);
+  const selection = useStudio((s) => s.selection);
+  const diags = useStudio((s) => s.snap?.diags ?? []);
+  const t = useStudio((s) => s.snap?.t ?? 0);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const board = getBoard(project.boardId);
+  const parts = project.parts.filter((p) => !p.type.startsWith("board:")).length;
+  const sel = project.parts.find((p) => p.id === selection[0]);
+  const bom = bomOf(project);
+  const errs = diags.filter((d) => d.level === "error").length;
+  return (
+    <footer className="statusbar">
+      <span className={`sb-run ${running ? (paused ? "paused" : "on") : ""}`}>
+        <i />
+        {running ? `${paused ? "Paused" : "Running"} · ${(t / 1000).toFixed(1)} s · ${speed}×` : "Ready"}
+      </span>
+      <span>{board.short}</span>
+      <span>Parts {parts}</span>
+      <span>Wires {project.wires.length}</span>
+      <span>{sel ? `${sel.label} selected` : "Nothing selected"}</span>
+      <button className="sb-bom" onClick={() => useStudio.setState({ modal: "projects" })} title={bom.lines.map((l) => `${l.qty}× ${l.name} ${usd(l.each * l.qty)}`).join("\n")}>
+        Build cost ≈ {usd(bom.total)}
+      </button>
+      <span className="spacer" />
+      <button className={`sb-diag ${errs ? "bad" : diags.length ? "warn" : "ok"}`} onClick={() => useStudio.setState({ dockTab: "diag", dockOpen: true })}>
+        {errs ? `✕ ${errs} problem${errs > 1 ? "s" : ""}` : diags.length ? `! ${diags.length} note${diags.length > 1 ? "s" : ""}` : "✓ No problems"}
+      </button>
+      <span>{now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+    </footer>
+  );
+}
+
 /** Everything that used to crowd the toolbar: projects, wire color, tidy, speed, sound, theme, account. */
-function MoreMenu({ phone }: { phone: boolean }) {
+function MoreMenu({ phone, cmd }: { phone: boolean; cmd: boolean }) {
   const [open, setOpen] = useState(false);
   const theme = useStudio((s) => s.theme);
   const user = useStudio((s) => s.user);
@@ -222,7 +300,7 @@ function MoreMenu({ phone }: { phone: boolean }) {
                 </span>
               </div>
             )}
-            {phone && <CommandBar />}
+            {cmd && <CommandBar />}
             {phone &&
               RAIL.filter((r) => !PHONE_RAIL.has(r.id)).map((r) => (
                 <button
@@ -477,7 +555,7 @@ export function Editor() {
   const editing = view !== "3d" && leftTab !== "case" && leftTab !== "drawing";
   const pickRail = (id: LeftTab) => set("leftTab", leftTab === id ? null : id);
   return (
-    <div className={`app layout-${layout} ${running ? "is-running" : ""} ${leftTab ? "has-drawer" : ""}`}>
+    <div className={`app layout-${layout} ${running ? "is-running" : ""} ${leftTab ? "has-drawer" : ""} ${layout !== "phone" ? "has-status" : ""}`}>
       <AppBar layout={layout} onParts={() => setRightOpen((o) => !o)} />
       <div className={`workspace ${leftTab ? "" : "no-drawer"}`}>
         <nav className="rail" aria-label="Tools">
@@ -568,6 +646,7 @@ export function Editor() {
           <Viewer3DModal />
         </Suspense>
       )}
+      {layout !== "phone" && <StatusBar />}
       <Toasts />
       <SoundEngine />
     </div>

@@ -9,9 +9,9 @@ export function LogoMark({ size = 30, animated = true }: { size?: number; animat
     <svg viewBox="0 0 40 40" width={size} height={size} aria-hidden className={`logo-mark ${animated ? "anim" : ""}`}>
       <defs>
         <linearGradient id={`lg${id}`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#bcd9a2" />
-          <stop offset="0.5" stopColor="#e8d4a2" />
-          <stop offset="1" stopColor="#f5b0a3" />
+          <stop offset="0" stopColor="#2dd4bf" />
+          <stop offset="0.5" stopColor="#22d3ee" />
+          <stop offset="1" stopColor="#38bdf8" />
         </linearGradient>
       </defs>
       <path d="M20 3.5 L32.5 16 L20 28.5 L7.5 16 Z" fill="none" stroke={`url(#lg${id})`} strokeWidth="1.9" strokeLinejoin="round" />

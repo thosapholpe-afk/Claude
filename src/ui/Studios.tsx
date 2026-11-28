@@ -37,7 +37,7 @@ export function TemplatesPanel() {
               <strong>{t.name}</strong>
               <small>{t.thai}</small>
               <span>{t.description}</span>
-              {!ok && <em>switches to {getBoard(t.boards![0]).short}</em>}
+              {!ok && <em>switches to {getBoard(t.boards?.[0] ?? "esp32-devkit-v1").short}</em>}
               {t.scenario && <em className="sc">scenario: {t.scenario}</em>}
             </button>
           );

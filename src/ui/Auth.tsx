@@ -99,9 +99,9 @@ function HeroScene({ t }: { t: number }) {
       <SvgDefs />
       <defs>
         <linearGradient id="heroGrad" x1="0" x2="1">
-          <stop offset="0" stopColor="#bcd9a2" />
-          <stop offset="0.5" stopColor="#e8d4a2" />
-          <stop offset="1" stopColor="#f5b0a3" />
+          <stop offset="0" stopColor="#2dd4bf" />
+          <stop offset="0.5" stopColor="#22d3ee" />
+          <stop offset="1" stopColor="#38bdf8" />
         </linearGradient>
       </defs>
       <g opacity={0.9}>
@@ -111,7 +111,7 @@ function HeroScene({ t }: { t: number }) {
             cx={66 + Math.sin(i * 2.1 + t * 3) * 3}
             cy={-4 - ((t * 0.8 + i / 14) % 1) * 18 * fire}
             r={(2 + (i % 3)) * fire * (1 - ((t * 0.8 + i / 14) % 1))}
-            fill={i % 3 ? "#f5b0a3" : "#e8d4a2"}
+            fill={i % 3 ? "#fbbf24" : "#22d3ee"}
             opacity={0.8}
             filter="url(#tc-glow)"
           />
@@ -127,14 +127,14 @@ function HeroScene({ t }: { t: number }) {
       <path d="M 50.5 1.3 C 55 -14, 95 -16, 108.7 4.6" stroke="#ff9f1c" strokeWidth={0.8} fill="none" />
       <path d="M 45.4 1.3 C 52 -10, 92 -6, 108.7 7.1" stroke="#ef3b36" strokeWidth={0.8} fill="none" />
       <path d="M 7 1.3 C 0 -18, 100 -22, 108.7 2" stroke="#55555a" strokeWidth={0.8} fill="none" />
-      <path d="M 17.2 26.7 C 18 40, 72 42, 73.8 33.4" stroke="#bcd9a2" strokeWidth={0.8} fill="none" />
+      <path d="M 17.2 26.7 C 18 40, 72 42, 73.8 33.4" stroke="#2dd4bf" strokeWidth={0.8} fill="none" />
       <g transform="translate(0 52)">
         <rect x={-2} y={0} width={132} height={44} rx={3} fill="var(--panel-2)" />
         <text x={2} y={6} fontSize={3} fill="var(--text-2)" fontFamily="IBM Plex Mono">
           flame IR · GPIO32
         </text>
         <polyline points={pts.join(" ")} transform="translate(2 2)" fill="none" stroke="url(#heroGrad)" strokeWidth={0.9} strokeLinejoin="round" />
-        <text x={126} y={6} fontSize={3} fill={alarm ? "#f5b0a3" : "var(--text-2)"} textAnchor="end" fontFamily="IBM Plex Mono">
+        <text x={126} y={6} fontSize={3} fill={alarm ? "#fbbf24" : "var(--text-2)"} textAnchor="end" fontFamily="IBM Plex Mono">
           {alarm ? "ALARM" : "clear"}
         </text>
       </g>
@@ -162,9 +162,9 @@ function Orbits({ t }: { t: number }) {
       <svg className="orbits" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
         <defs>
           <linearGradient id="orbitGrad" x1="0" x2="1">
-            <stop offset="0" stopColor="#bcd9a2" stopOpacity="0.9" />
-            <stop offset="0.5" stopColor="#e8d4a2" stopOpacity="0.4" />
-            <stop offset="1" stopColor="#f5b0a3" stopOpacity="0.9" />
+            <stop offset="0" stopColor="#2dd4bf" stopOpacity="0.9" />
+            <stop offset="0.5" stopColor="#22d3ee" stopOpacity="0.4" />
+            <stop offset="1" stopColor="#38bdf8" stopOpacity="0.9" />
           </linearGradient>
         </defs>
         {ORBITS.map((o, i) => (
@@ -191,7 +191,7 @@ function Orbits({ t }: { t: number }) {
   );
 }
 
-const MARQUEE = ["ESP32 DevKit", "Arduino Uno R3", "Raspberry Pi Pico", "Raspberry Pi 4", "DHT22", "HC-SR04", "Servo SG90", "MG996R", "MQ-2", "ADXL335", "NeoPixel", "LCD 16×2", "MQTT", "FFT", "STL", "DXF"];
+const MARQUEE = ["ESP32", "Arduino", "Raspberry Pi Pico", "Raspberry Pi 4", "PLC + Ladder", "Pneumatics", "Servos", "Sensors", "MQTT", "Claude MCP", "STL cases"];
 
 const FEATURES = [
   { title: "Simulate", body: "Drag boards and sensors onto a breadboard, or type “GP10 → LED1” and the wiring picks free pins. Arduino C++, MicroPython and Python run against a real circuit solver.", icon: Cpu },
@@ -260,11 +260,11 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
       >
         <div className="hero-copy">
           <motion.p className="eyebrow" variants={rise} initial="hidden" animate="show" custom={0}>
-            Digital twin studio for makers
+            Digital twin studio
           </motion.p>
           <h1>
             {["Wire it.", "Run it.", "Put it through fire."].map((line, i) => (
-              <motion.span key={line} className="grad-text line" variants={rise} initial="hidden" animate="show" custom={i + 1}>
+              <motion.span key={line} className={`line ${i === 2 ? "accent" : ""}`} variants={rise} initial="hidden" animate="show" custom={i + 1}>
                 {line}
               </motion.span>
             ))}
@@ -311,7 +311,13 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
         <motion.div className="hero-stage" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.1, delay: 0.3, ease: [0.2, 0.8, 0.2, 1] }}>
           <motion.div className="stage-inner" style={{ x: stageX, y: stageY, rotateX: stageRX, rotateY: stageRY }}>
             <Orbits t={t} />
-            <div className="hero-art float">
+            <div className="hero-art float browser-frame">
+              <div className="bf-bar" aria-hidden>
+                <i />
+                <i />
+                <i />
+                <span>{typeof location !== "undefined" ? location.host : "thosaphol-connect"}</span>
+              </div>
               <HeroScene t={t} />
             </div>
           </motion.div>
@@ -336,6 +342,17 @@ export function Landing({ me, onLocal }: { me: MeResponse | null; onLocal: () =>
           ))}
         </div>
       </div>
+      <section className="made-for" aria-label="Made for">
+        <p className="eyebrow">Made for</p>
+        <ol>
+          {["Students & teachers", "Makers & robotics clubs", "Automation & PLC technicians", "Embedded engineers"].map((m, i) => (
+            <motion.li key={m} initial={{ opacity: 0, x: -16 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.8 }} transition={{ duration: 0.4, delay: i * 0.08 }}>
+              <b>{String(i + 1).padStart(2, "0")}</b>
+              {m}
+            </motion.li>
+          ))}
+        </ol>
+      </section>
       <section className="how" id="how">
         <motion.h2 className="how-title" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.6 }} transition={{ duration: 0.7 }}>
           From breadboard to <span className="grad-text">the real world</span>
